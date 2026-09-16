@@ -16,7 +16,7 @@ export const config: AppConfig = {
   port: Number(process.env.PORT ?? 3300),
   host: process.env.HOST ?? '0.0.0.0',
   geminiApiKey: process.env.GEMINI_API_KEY ?? null,
-  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-2.0-flash',
+  geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.6-flash',
   dataDir: path.resolve(rootDir, 'data', 'meetings'),
   uploadsDir: path.resolve(rootDir, 'data', 'uploads'),
 } as const;
