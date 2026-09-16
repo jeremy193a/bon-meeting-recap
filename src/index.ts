@@ -46,6 +46,25 @@ app.get('/api/config', (c) => {
 });
 
 /**
+ * Download feature summary Word document
+ */
+app.get('/api/features/word', async (c) => {
+  try {
+    const filePath = path.resolve(process.cwd(), 'Tinh-nang-Bon-Meeting-Recap.docx');
+    const buffer = await fs.readFile(filePath);
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': 'attachment; filename="Tinh-nang-Bon-Meeting-Recap.docx"',
+      },
+    });
+  } catch (err) {
+    console.error('[API] Failed to serve feature docx:', err);
+    return c.json({ error: 'Feature document not found' }, 404);
+  }
+});
+
+/**
  * List all processed meetings
  */
 app.get('/api/meetings', async (c) => {
