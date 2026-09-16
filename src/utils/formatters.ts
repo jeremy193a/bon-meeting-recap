@@ -16,6 +16,12 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
   if (recap.durationEstimate) {
     lines.push(`> **Thời lượng ước tính:** ${recap.durationEstimate}`);
   }
+  if (recap.attendees && recap.attendees.length > 0) {
+    lines.push(`> **Người tham dự:** ${recap.attendees.join(', ')}`);
+  }
+  if (recap.meetingGoal) {
+    lines.push(`> **Mục tiêu cuộc họp:** ${recap.meetingGoal} (${recap.goalAchievementStatus || 'N/A'})`);
+  }
   lines.push('');
 
   // Executive summary
@@ -35,7 +41,7 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
   lines.push('');
 
   // Action items
-  lines.push('## ✅ Nhiệm Vụ Tiếp Theo (Action Items)');
+  lines.push('## ✅ Nhiệm Vụ & Phân Công (Action Items - Odoo Ready)');
   if (recap.actionItems.length === 0) {
     lines.push('_Không có action item cụ thể._');
   } else {
@@ -45,9 +51,31 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
       const priorityStr = item.priority === 'high' ? ' 🚨 [HIGH]' : item.priority === 'low' ? ' 🟢 [LOW]' : '';
       const checkbox = item.completed ? '[x]' : '[ ]';
       lines.push(`- ${checkbox} **${item.task}**${assigneeStr}${dueStr}${priorityStr}`);
+      if (item.description && item.description !== item.task) {
+        lines.push(`  > *Mô tả:* ${item.description}`);
+      }
     }
   }
   lines.push('');
+
+  // Open Questions & Blockers
+  if (recap.openQuestions && recap.openQuestions.length > 0) {
+    lines.push('## ❓ Vấn Đề Chưa Chốt (Open Questions)');
+    for (const q of recap.openQuestions) {
+      const ownerStr = q.owner ? ` *(Chờ phản hồi từ: **${q.owner}**)*` : '';
+      lines.push(`- ⚠️ ${q.question}${ownerStr}`);
+    }
+    lines.push('');
+  }
+
+  // Risks
+  if (recap.risks && recap.risks.length > 0) {
+    lines.push('## ⚠️ Cảnh Báo Rủi Ro (Risks & Blockers)');
+    for (const risk of recap.risks) {
+      lines.push(`- 🛑 ${risk}`);
+    }
+    lines.push('');
+  }
 
   // Topics breakdown
   if (recap.topics.length > 0) {

@@ -23,29 +23,61 @@ export interface ProcessAudioOptions {
   displayName?: string;
   customApiKey?: string | null;
   customPrompt?: string;
+  attendees?: string;
+  meetingGoal?: string;
 }
 
-const DEFAULT_RECAP_PROMPT = `
-Bạn là một chuyên gia thư ký cuộc họp cao cấp.
-Nhiệm vụ của bạn: Nghe bản ghi âm cuộc họp đính kèm và trích xuất bản tóm tắt cuộc họp (Meeting Recap) chính xác, mạch lạc, súc tích bằng tiếng Việt.
+function buildPrompt(options: {
+  attendees?: string;
+  meetingGoal?: string;
+  customPrompt?: string;
+}): string {
+  let contextAdditions = '';
+  if (options.attendees?.trim()) {
+    contextAdditions += `\nDANH SÁCH NGƯỜI THAM DỰ: ${options.attendees.trim()}.\nHãy đối chiếu giọng nói và tên gọi trong file ghi âm với danh sách này để gán chính xác người phụ trách (assignee).\n`;
+  }
+  if (options.meetingGoal?.trim()) {
+    contextAdditions += `\nMỤC TIÊU CUỘC HỌP: "${options.meetingGoal.trim()}".\nTrong phần executiveSummary, hãy nhận xét ngắn gọn xem cuộc họp đã đạt được mục tiêu này hay chưa.\n`;
+  }
+  if (options.customPrompt?.trim()) {
+    contextAdditions += `\nYÊU CẦU BỔ SUNG: "${options.customPrompt.trim()}".\n`;
+  }
+
+  return `
+Bạn là một trợ lý thư ký cuộc họp cao cấp và chuyên gia quản lý dự án.
+Nhiệm vụ: Nghe kỹ bản ghi âm cuộc họp đính kèm và trích xuất biên bản họp có cấu trúc (Meeting Recap) chuẩn xác, chi tiết, súc tích bằng tiếng Việt.
+${contextAdditions}
 
 Hãy trả về DUY NHẤT một JSON object hợp lệ theo schema sau:
 {
   "title": "Tiêu đề ngắn gọn phản ánh đúng trọng tâm cuộc họp",
   "language": "vi",
   "durationEstimate": "Ước lượng thời gian cuộc họp (ví dụ: ~20 phút)",
-  "executiveSummary": "Đoạn tóm tắt tổng quan 3-5 câu nêu bối cảnh, mục đích và kết quả then chốt",
+  "attendees": ["Tên người 1", "Tên người 2"],
+  "meetingGoal": "${options.meetingGoal?.trim() || ''}",
+  "goalAchievementStatus": "Đã đạt được / Đạt một phần / Chưa đạt được",
+  "executiveSummary": "Đoạn tóm tắt tổng quan 3-5 câu nêu bối cảnh, mục đích và kết quả then chốt đạt được",
   "decisions": [
     "Quyết định dứt khoát 1",
     "Quyết định dứt khoát 2"
   ],
   "actionItems": [
     {
-      "task": "Nhiệm vụ cụ thể cần triển khai",
-      "assignee": "Tên người phụ trách (hoặc null nếu không xác định được)",
-      "dueDate": "Thời hạn hoàn thành nếu có (hoặc null)",
-      "priority": "high" // "high" | "medium" | "low"
+      "task": "Tên công việc / nhiệm vụ cụ thể cần triển khai",
+      "assignee": "Tên người phụ trách (hoặc null nếu không xác định)",
+      "dueDate": "Thời hạn hoàn thành rõ ràng nếu có (hoặc null)",
+      "priority": "high", // "high" | "medium" | "low"
+      "description": "Mô tả chi tiết yêu cầu công việc, tiêu chí hoàn thành hoặc bối cảnh cần lưu ý để người làm hiểu ngay"
     }
+  ],
+  "openQuestions": [
+    {
+      "question": "Câu hỏi hoặc vấn đề bỏ ngỏ chưa chốt được tại cuộc họp",
+      "owner": "Người cần trả lời hoặc tìm hiểu thêm (hoặc null)"
+    }
+  ],
+  "risks": [
+    "Rủi ro về kỹ thuật, tiến độ, hoặc phụ thuộc bên ngoài được đề cập trong cuộc họp"
   ],
   "topics": [
     {
@@ -60,17 +92,19 @@ Hãy trả về DUY NHẤT một JSON object hợp lệ theo schema sau:
   "transcript": [
     {
       "timestamp": "01:25",
-      "speaker": "Người nói (nếu nhận diện được) hoặc Speaker 1",
+      "speaker": "Tên người nói (nếu nhận diện được) hoặc Speaker 1",
       "text": "Nội dung câu nói hoặc ý kiến then chốt"
     }
   ]
 }
 
 Quy tắc:
-1. Nếu cuộc họp nói tiếng Việt pha trộn thuật ngữ công nghệ tiếng Anh (Vietglish), hãy giữ nguyên thuật ngữ chuyên ngành chuẩn.
-2. Với Action Items, chỉ trích xuất những việc có cam kết thực hiện hoặc giao việc rõ ràng.
-3. Không tự bịa thông tin không được đề cập trong file ghi âm.
+1. Phân biệt rõ "Cam kết chắc chắn (Action Items)" và "Ý kiến chưa chốt (Open Questions)".
+2. Với Action Items, viết description súc tích nhưng đủ ý (như 1 task Odoo/Jira) để ai đọc vào cũng bắt tay làm được ngay.
+3. Giữ nguyên thuật ngữ kỹ thuật / Vietglish tự nhiên.
+4. Không tự bịa thông tin không được đề cập trong file ghi âm.
 `;
+}
 
 /**
  * Uploads an audio file to Gemini File API and generates a structured Meeting Recap.
@@ -78,7 +112,8 @@ Quy tắc:
 export async function processAudioToRecap(
   options: ProcessAudioOptions,
 ): Promise<MeetingRecapData> {
-  const { filePath, mimeType, displayName, customApiKey, customPrompt } = options;
+  const { filePath, mimeType, displayName, customApiKey, customPrompt, attendees, meetingGoal } =
+    options;
 
   if (!fs.existsSync(filePath)) {
     throw new Error(`Audio file not found at path: ${filePath}`);
@@ -118,7 +153,7 @@ export async function processAudioToRecap(
 
   try {
     console.log(`[Gemini] Generating recap using model: ${config.geminiModel}...`);
-    const prompt = customPrompt?.trim() || DEFAULT_RECAP_PROMPT;
+    const prompt = buildPrompt({ attendees, meetingGoal, customPrompt });
 
     const response = await ai.models.generateContent({
       model: config.geminiModel,
@@ -157,12 +192,16 @@ export async function processAudioToRecap(
       assignee: item.assignee || null,
       dueDate: item.dueDate || null,
       priority: ['low', 'medium', 'high'].includes(item.priority) ? item.priority : 'medium',
+      description: item.description || item.task || '',
       completed: false,
     }));
 
     parsedData.decisions = parsedData.decisions || [];
+    parsedData.openQuestions = parsedData.openQuestions || [];
+    parsedData.risks = parsedData.risks || [];
     parsedData.topics = parsedData.topics || [];
     parsedData.transcript = parsedData.transcript || [];
+    parsedData.attendees = parsedData.attendees || [];
 
     return parsedData;
   } finally {

@@ -11,7 +11,13 @@ export interface ActionItem {
   assignee: string | null;
   dueDate: string | null;
   priority: Priority;
+  description?: string;
   completed?: boolean;
+}
+
+export interface OpenQuestion {
+  question: string;
+  owner: string | null;
 }
 
 export interface TopicItem {
@@ -30,9 +36,14 @@ export interface MeetingRecapData {
   title: string;
   language: string;
   durationEstimate?: string;
+  attendees?: string[];
+  meetingGoal?: string | null;
+  goalAchievementStatus?: string | null;
   executiveSummary: string;
   decisions: string[];
   actionItems: ActionItem[];
+  openQuestions?: OpenQuestion[];
+  risks?: string[];
   topics: TopicItem[];
   transcript?: MeetingTranscriptSegment[];
 }

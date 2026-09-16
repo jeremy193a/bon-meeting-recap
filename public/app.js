@@ -75,6 +75,8 @@ const recordStatusText = document.getElementById('recordStatusText');
 const recordedAudioPreview = document.getElementById('recordedAudioPreview');
 
 const meetingTitleInput = document.getElementById('meetingTitleInput');
+const attendeesInput = document.getElementById('attendeesInput');
+const meetingGoalInput = document.getElementById('meetingGoalInput');
 const btnToggleAdvanced = document.getElementById('btnToggleAdvanced');
 const advancedContent = document.getElementById('advancedContent');
 const advancedArrow = document.getElementById('advancedArrow');
@@ -89,10 +91,16 @@ const detailTitle = document.getElementById('detailTitle');
 const detailDate = document.getElementById('detailDate');
 const detailLanguageBadge = document.getElementById('detailLanguageBadge');
 const detailDuration = document.getElementById('detailDuration');
+const detailAttendeesContainer = document.getElementById('detailAttendeesContainer');
+const detailAttendeesList = document.getElementById('detailAttendeesList');
 const detailExecutiveSummary = document.getElementById('detailExecutiveSummary');
 const detailDecisionsList = document.getElementById('detailDecisionsList');
 const detailActionItemsList = document.getElementById('detailActionItemsList');
 const actionItemsProgressBadge = document.getElementById('actionItemsProgressBadge');
+const openQuestionsSection = document.getElementById('openQuestionsSection');
+const detailOpenQuestionsList = document.getElementById('detailOpenQuestionsList');
+const risksSection = document.getElementById('risksSection');
+const detailRisksList = document.getElementById('detailRisksList');
 const detailTopicsContainer = document.getElementById('detailTopicsContainer');
 const detailTranscriptList = document.getElementById('detailTranscriptList');
 const transcriptCard = document.getElementById('transcriptCard');
@@ -100,6 +108,7 @@ const meetingAudioPlayer = document.getElementById('meetingAudioPlayer');
 
 const btnCopyAll = document.getElementById('btnCopyAll');
 const btnDownloadMd = document.getElementById('btnDownloadMd');
+const btnDownloadExcel = document.getElementById('btnDownloadExcel');
 const btnDeleteMeeting = document.getElementById('btnDeleteMeeting');
 
 // Toast
@@ -316,6 +325,12 @@ processForm.addEventListener('submit', async (e) => {
   if (meetingTitleInput.value.trim()) {
     formData.append('title', meetingTitleInput.value.trim());
   }
+  if (attendeesInput && attendeesInput.value.trim()) {
+    formData.append('attendees', attendeesInput.value.trim());
+  }
+  if (meetingGoalInput && meetingGoalInput.value.trim()) {
+    formData.append('meetingGoal', meetingGoalInput.value.trim());
+  }
   if (customPromptInput.value.trim()) {
     formData.append('customPrompt', customPromptInput.value.trim());
   }
@@ -458,6 +473,21 @@ async function viewMeeting(id) {
       document.getElementById('audioPlayerContainer').classList.add('hidden');
     }
 
+    // Attendees
+    if (r.attendees && r.attendees.length > 0) {
+      detailAttendeesList.innerHTML = r.attendees
+        .map(
+          (a) =>
+            `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium text-[11px]">${escapeHtml(
+              a,
+            )}</span>`,
+        )
+        .join('');
+      detailAttendeesContainer.classList.remove('hidden');
+    } else {
+      detailAttendeesContainer.classList.add('hidden');
+    }
+
     // Summary
     detailExecutiveSummary.textContent = r.executiveSummary || 'Chưa có tóm tắt.';
 
@@ -479,6 +509,51 @@ async function viewMeeting(id) {
 
     // Action Items
     renderActionItems(m);
+
+    // Open Questions
+    detailOpenQuestionsList.innerHTML = '';
+    if (r.openQuestions && r.openQuestions.length > 0) {
+      openQuestionsSection.classList.remove('hidden');
+      for (const q of r.openQuestions) {
+        const li = document.createElement('li');
+        li.className =
+          'flex items-start space-x-2 bg-amber-50/50 p-2.5 rounded-lg border border-amber-100/80';
+        li.innerHTML = `
+          <i data-lucide="help-circle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+          <div class="flex-1">
+            <span class="font-medium text-slate-800">${escapeHtml(q.question)}</span>
+            ${
+              q.owner
+                ? `<span class="block text-[11px] text-amber-700 mt-0.5">Chờ phản hồi từ: <strong>${escapeHtml(
+                    q.owner,
+                  )}</strong></span>`
+                : ''
+            }
+          </div>
+        `;
+        detailOpenQuestionsList.appendChild(li);
+      }
+    } else {
+      openQuestionsSection.classList.add('hidden');
+    }
+
+    // Risks
+    detailRisksList.innerHTML = '';
+    if (r.risks && r.risks.length > 0) {
+      risksSection.classList.remove('hidden');
+      for (const risk of r.risks) {
+        const li = document.createElement('li');
+        li.className =
+          'flex items-start space-x-2 bg-rose-50/50 p-2.5 rounded-lg border border-rose-100/80';
+        li.innerHTML = `
+          <i data-lucide="alert-octagon" class="w-4 h-4 text-rose-600 shrink-0 mt-0.5"></i>
+          <span class="text-slate-800">${escapeHtml(risk)}</span>
+        `;
+        detailRisksList.appendChild(li);
+      }
+    } else {
+      risksSection.classList.add('hidden');
+    }
 
     // Topics
     detailTopicsContainer.innerHTML = '';
@@ -562,8 +637,9 @@ function renderActionItems(meeting) {
       <label class="flex items-start space-x-3 flex-1 cursor-pointer select-none py-1">
         <input type="checkbox" ${isChecked ? 'checked' : ''} class="mt-0.5 w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0">
         <div class="space-y-0.5 min-w-0 flex-1">
-          <p class="text-xs font-medium text-slate-800 break-words leading-relaxed ${isChecked ? 'line-through text-slate-400' : ''}">${escapeHtml(item.task)}</p>
-          <div class="flex items-center space-x-2.5 text-[11px] text-slate-400 flex-wrap gap-y-0.5">
+          <p class="text-xs font-semibold text-slate-800 break-words leading-relaxed ${isChecked ? 'line-through text-slate-400' : ''}">${escapeHtml(item.task)}</p>
+          ${item.description && item.description !== item.task ? `<p class="text-[11px] text-slate-500 break-words leading-normal mt-0.5 bg-slate-50 p-1.5 rounded border border-slate-100">${escapeHtml(item.description)}</p>` : ''}
+          <div class="flex items-center space-x-2.5 text-[11px] text-slate-400 flex-wrap gap-y-0.5 pt-0.5">
             ${item.assignee ? `<span>👤 <strong class="text-slate-700">${escapeHtml(item.assignee)}</strong></span>` : ''}
             ${item.dueDate ? `<span>📅 <strong class="text-slate-700">${escapeHtml(item.dueDate)}</strong></span>` : ''}
           </div>
@@ -607,6 +683,13 @@ btnDownloadMd.addEventListener('click', () => {
   if (!currentMeetingId) return;
   window.location.href = `/api/meetings/${currentMeetingId}/markdown`;
 });
+
+if (btnDownloadExcel) {
+  btnDownloadExcel.addEventListener('click', () => {
+    if (!currentMeetingId) return;
+    window.location.href = `/api/meetings/${currentMeetingId}/excel`;
+  });
+}
 
 btnCopyAll.addEventListener('click', async () => {
   if (!currentMeetingId) return;

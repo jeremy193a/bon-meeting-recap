@@ -1,0 +1,66 @@
+{
+  "id": "demo-sprint-test",
+  "title": "Họp Sprint Review 4 & Kế hoạch Odoo",
+  "createdAt": "2026-09-16T10:56:50.121Z",
+  "recap": {
+    "title": "Họp Sprint Review 4 & Kế hoạch Odoo",
+    "language": "vi",
+    "attendees": [
+      "Quang Hà",
+      "Tuấn Backend",
+      "Lan Frontend"
+    ],
+    "meetingGoal": "Thống nhất chuẩn Excel import vào Odoo và phân công việc tuần",
+    "goalAchievementStatus": "Đã đạt được",
+    "executiveSummary": "Team đã thống nhất quy trình bóc tách Action Items từ biên bản họp ra file Excel chuẩn để import thẳng vào Odoo Project. Đã phân công rõ người phụ trách, thời hạn và tiêu chí nghiệm thu.",
+    "decisions": [
+      "Áp dụng định dạng Excel 2 sheet (Tasks và Overview) chuẩn hoá cho Odoo",
+      "Mọi Action Item bắt buộc phải có Assignee và Deadline cụ thể"
+    ],
+    "actionItems": [
+      {
+        "task": "Thiết kế cấu trúc cột Excel chuẩn Odoo Task Import",
+        "assignee": "Quang Hà",
+        "dueDate": "18/09/2026",
+        "priority": "high",
+        "description": "Tạo 2 sheet: Action Items có cột ID, Task Name, Assignee, Deadline và Sheet Overview.",
+        "completed": true
+      },
+      {
+        "task": "Tích hợp endpoint export Excel vào Hono server",
+        "assignee": "Tuấn Backend",
+        "dueDate": "19/09/2026",
+        "priority": "medium",
+        "description": "Dùng thư viện exceljs trả về application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "completed": false
+      },
+      {
+        "task": "Kiểm thử workflow import Excel vào Odoo Project module",
+        "assignee": "Lan Frontend",
+        "dueDate": "20/09/2026",
+        "priority": "low",
+        "description": "Test import file .xlsx vào Odoo 17/18 để kiểm tra mapping cột tên task, người làm và ngày hết hạn.",
+        "completed": false
+      }
+    ],
+    "openQuestions": [
+      {
+        "question": "Odoo version trên server công ty đang chạy là v17 hay v18 để map trường stage_id?",
+        "owner": "Quang Hà"
+      }
+    ],
+    "risks": [
+      "File ghi âm trên 2 tiếng có thể vượt quá timeout upload của mobile nếu mạng yếu, cần hỗ trợ nén bitrate trước khi gửi"
+    ],
+    "topics": [
+      {
+        "title": "Quy trình Odoo Workflow & Next Actions",
+        "summary": "Thảo luận cách kết nối Action Items sau họp trực tiếp vào hệ thống quản lý công việc",
+        "keyPoints": [
+          "Giai đoạn 1: Xuất file Excel chuẩn hóa để người dùng tự review và import Odoo",
+          "Giai đoạn 2: Tích hợp trực tiếp Odoo XML-RPC / REST API để tự động sinh Task"
+        ]
+      }
+    ]
+  }
+}

@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
+import { generateMeetingExcel } from './services/excel.js';
 import { processAudioToRecap } from './services/gemini.js';
 import {
   deleteMeeting,
@@ -95,6 +96,37 @@ app.get('/api/meetings/:id/markdown', async (c) => {
 });
 
 /**
+ * Export meeting tasks to Excel (.xlsx) for Odoo / Task Management
+ */
+app.get('/api/meetings/:id/excel', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const meeting = await getMeeting(id);
+    if (!meeting) {
+      return c.json({ error: 'Meeting not found' }, 404);
+    }
+
+    const excelBuffer = await generateMeetingExcel(meeting);
+    const safeTitle = (meeting.title || 'meeting-recap')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 40);
+
+    c.header(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="${safeTitle}-tasks.xlsx"`,
+    );
+    return c.body(new Uint8Array(excelBuffer));
+  } catch (err) {
+    console.error(`[API] Failed to generate Excel for ${id}:`, err);
+    return c.json({ error: 'Failed to generate Excel file' }, 500);
+  }
+});
+
+/**
  * Stream/serve uploaded audio file
  */
 app.get('/api/meetings/:id/audio', async (c) => {
@@ -132,6 +164,8 @@ app.post('/api/meetings/process', async (c) => {
     const body = await c.req.parseBody();
     const file = body['file'];
     const customTitle = typeof body['title'] === 'string' ? body['title'].trim() : '';
+    const attendees = typeof body['attendees'] === 'string' ? body['attendees'].trim() : '';
+    const meetingGoal = typeof body['meetingGoal'] === 'string' ? body['meetingGoal'].trim() : '';
     const customPrompt =
       typeof body['customPrompt'] === 'string' ? body['customPrompt'].trim() : '';
     const clientApiKey = c.req.header('x-gemini-api-key') || null;
@@ -185,6 +219,8 @@ app.post('/api/meetings/process', async (c) => {
       displayName: file.name,
       customApiKey: clientApiKey,
       customPrompt: customPrompt || undefined,
+      attendees: attendees || undefined,
+      meetingGoal: meetingGoal || undefined,
     });
 
     const record: MeetingRecord = {

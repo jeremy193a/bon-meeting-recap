@@ -10,11 +10,11 @@
     "tunnel": "cloudflared tunnel --config ~/.cloudflared/recap.yml run recap.quangha.me"
   },
   "type": "module",
-
   "dependencies": {
     "@google/genai": "^2.22.0",
     "@hono/node-server": "^2.1.1",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "hono": "^4.13.8",
     "zod": "^4.6.5"
   },
