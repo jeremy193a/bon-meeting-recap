@@ -1,0 +1,25 @@
+{
+  "name": "bon-meeting-recap",
+  "version": "1.0.0",
+  "description": "Lean AI Meeting Recap powered by Gemini Multimodal Audio and Hono",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc"
+  },
+  "type": "module",
+
+  "dependencies": {
+    "@google/genai": "^2.22.0",
+    "@hono/node-server": "^2.1.1",
+    "dotenv": "^17.4.2",
+    "hono": "^4.13.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

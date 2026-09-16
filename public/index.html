@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-50 text-slate-900">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bon Meeting Recap — AI Audio Recap by Gemini</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+</head>
+<body class="h-full flex flex-col antialiased">
+
+  <!-- Top Navigation -->
+  <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-30 shadow-sm">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+        <i data-lucide="sparkles" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <h1 class="font-bold text-lg text-slate-900 tracking-tight">Bon Meeting Recap</h1>
+          <span class="text-xs bg-indigo-50 text-indigo-700 font-medium px-2 py-0.5 rounded-full border border-indigo-200/60">Gemini 2.0 Flash</span>
+        </div>
+        <p class="text-xs text-slate-500">Multimodal Audio Ingestion & Structured Meeting Intelligence</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center space-x-3">
+      <!-- API Key button -->
+      <button id="btnApiKey" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 hover:bg-slate-50 transition-colors">
+        <span id="apiKeyDot" class="w-2 h-2 rounded-full bg-amber-400"></span>
+        <span id="apiKeyLabel">Gemini API Key</span>
+      </button>
+
+      <button id="btnNewRecap" class="flex items-center space-x-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shadow-sm shadow-blue-500/20 transition-all">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Tạo Recap Mới</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="flex flex-1 overflow-hidden">
+    
+    <!-- Sidebar: Meeting List -->
+    <aside class="w-80 border-r border-slate-200 bg-white flex flex-col shrink-0">
+      <div class="p-3 border-b border-slate-100">
+        <div class="relative">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+          <input id="searchInput" type="text" placeholder="Tìm kiếm cuộc họp..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+        </div>
+      </div>
+
+      <div id="meetingsList" class="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 space-y-1">
+        <!-- Meeting items populated dynamically -->
+        <div id="emptyListState" class="py-12 px-4 text-center">
+          <i data-lucide="inbox" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+          <p class="text-xs text-slate-500">Chưa có cuộc họp nào.</p>
+          <p class="text-[11px] text-slate-400 mt-1">Upload hoặc ghi âm để bắt đầu recap.</p>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace -->
+    <main id="mainWorkspace" class="flex-1 overflow-y-auto bg-slate-50/60 p-6">
+
+      <!-- View 1: Upload / New Recap Form -->
+      <section id="uploadSection" class="max-w-2xl mx-auto space-y-6">
+        <div class="text-center space-y-1">
+          <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Tạo Bản Tóm Tắt Cuộc Họp</h2>
+          <p class="text-sm text-slate-500">Gemini trực tiếp phân tích audio stream, nhận diện ngữ cảnh và tạo Action Items tự động</p>
+        </div>
+
+        <!-- API Key Missing Warning Banner (Hidden if configured) -->
+        <div id="apiKeyBanner" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 flex items-start space-x-3">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0 mt-0.5"></i>
+          <div class="flex-1 space-y-1">
+            <p class="font-semibold">Chưa cấu hình GEMINI_API_KEY</p>
+            <p class="text-amber-700">Vui lòng nhập API Key để bắt đầu. Bạn có thể lấy API Key miễn phí từ Google AI Studio.</p>
+            <button id="bannerInputKeyBtn" class="mt-1 text-blue-600 font-medium hover:underline inline-block">Nhập API Key ngay &rarr;</button>
+          </div>
+        </div>
+
+        <!-- Mode Toggle: Upload vs Record -->
+        <div class="bg-slate-200/60 p-1 rounded-xl flex max-w-sm mx-auto text-xs font-medium">
+          <button id="tabUploadMode" class="flex-1 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition-all flex items-center justify-center space-x-1.5">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+            <span>Upload File Âm Thanh</span>
+          </button>
+          <button id="tabRecordMode" class="flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center justify-center space-x-1.5">
+            <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+            <span>Ghi Âm Trực Tiếp</span>
+          </button>
+        </div>
+
+        <form id="processForm" class="space-y-4">
+          <!-- Drop Zone -->
+          <div id="dropZoneContainer">
+            <div id="dropZone" class="border-2 border-dashed border-slate-300 hover:border-blue-500 hover:bg-blue-50/20 bg-white rounded-2xl p-8 text-center transition-all cursor-pointer group">
+              <input id="audioFileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg,.flac" class="hidden">
+              <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <i data-lucide="cloud-upload" class="w-6 h-6"></i>
+              </div>
+              <p class="text-sm font-semibold text-slate-800">Kéo thả file ghi âm vào đây hoặc <span class="text-blue-600 hover:underline">chọn file</span></p>
+              <p class="text-xs text-slate-400 mt-1">Hỗ trợ MP3, M4A, WAV, WebM, OGG (hỗ trợ file dài tới hàng giờ)</p>
+              <div id="selectedFileInfo" class="hidden mt-3 inline-flex items-center space-x-2 bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded-lg">
+                <i data-lucide="file-audio" class="w-4 h-4 text-blue-600"></i>
+                <span id="selectedFileName" class="font-medium truncate max-w-xs">filename.mp3</span>
+                <span id="selectedFileSize" class="text-slate-400 text-[11px]">(0 MB)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- In-Browser Audio Recorder (Hidden by default) -->
+          <div id="recordContainer" class="hidden border border-slate-200 bg-white rounded-2xl p-8 text-center space-y-4 shadow-sm">
+            <div id="recordVisualizer" class="w-16 h-16 mx-auto rounded-full bg-red-50 text-red-600 flex items-center justify-center relative">
+              <i data-lucide="mic" class="w-8 h-8"></i>
+              <span id="recordPing" class="hidden absolute w-full h-full rounded-full bg-red-400 opacity-75 animate-ping"></span>
+            </div>
+            <div>
+              <div id="recordTimer" class="text-2xl font-mono font-bold text-slate-800">00:00</div>
+              <p id="recordStatusText" class="text-xs text-slate-400 mt-1">Sẵn sàng ghi âm từ Microphone máy tính</p>
+            </div>
+            <div class="flex items-center justify-center space-x-3">
+              <button id="btnStartRecord" type="button" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-all shadow-sm shadow-red-500/20">
+                <i data-lucide="disc" class="w-4 h-4"></i>
+                <span>Bắt Đầu Ghi Âm</span>
+              </button>
+              <button id="btnStopRecord" type="button" disabled class="px-4 py-2 bg-slate-100 text-slate-400 text-xs font-semibold rounded-lg flex items-center space-x-1.5 transition-all disabled:opacity-50">
+                <i data-lucide="square" class="w-4 h-4"></i>
+                <span>Dừng & Sử Dụng</span>
+              </button>
+            </div>
+            <audio id="recordedAudioPreview" controls class="hidden w-full max-w-md mx-auto mt-4"></audio>
+          </div>
+
+          <!-- Meeting Title (Optional) -->
+          <div>
+            <label for="meetingTitleInput" class="block text-xs font-semibold text-slate-700 mb-1">Tiêu Đề Cuộc Họp (Không bắt buộc)</label>
+            <input id="meetingTitleInput" type="text" placeholder="Để trống để Gemini tự động đặt tiêu đề theo nội dung..." class="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+          </div>
+
+          <!-- Advanced Accordion: Custom Prompt -->
+          <div class="border border-slate-200 rounded-xl bg-white overflow-hidden">
+            <button id="btnToggleAdvanced" type="button" class="w-full px-4 py-2.5 text-xs font-medium text-slate-600 flex items-center justify-between hover:bg-slate-50 transition-colors">
+              <span class="flex items-center space-x-1.5">
+                <i data-lucide="sliders" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Tùy chỉnh Prompt / Trọng tâm tóm tắt (Nâng cao)</span>
+              </span>
+              <i id="advancedArrow" data-lucide="chevron-down" class="w-4 h-4 transition-transform"></i>
+            </button>
+            <div id="advancedContent" class="hidden p-4 border-t border-slate-100 bg-slate-50/50 space-y-2">
+              <p class="text-[11px] text-slate-500">Bạn có thể yêu cầu Gemini chú trọng vào các khía cạnh cụ thể (ví dụ: "chỉ lọc các task liên quan đến Backend và timeline bàn giao"):</p>
+              <textarea id="customPromptInput" rows="3" placeholder="Nhập yêu cầu riêng cho AI nếu cần..." class="w-full p-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"></textarea>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <button id="btnSubmitRecap" type="submit" disabled class="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-semibold text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-2">
+            <i data-lucide="wand-2" class="w-4 h-4"></i>
+            <span>Bắt Đầu Xử Lý & Tạo Recap</span>
+          </button>
+        </form>
+
+        <!-- Processing State Overlay / Card -->
+        <div id="processingCard" class="hidden border border-blue-100 bg-blue-50/50 rounded-2xl p-8 text-center space-y-4">
+          <div class="w-12 h-12 mx-auto rounded-full bg-blue-600 text-white flex items-center justify-center animate-spin">
+            <i data-lucide="loader-2" class="w-6 h-6"></i>
+          </div>
+          <div class="space-y-1">
+            <h3 class="font-bold text-slate-900 text-sm">Gemini Đang Phân Tích Audio...</h3>
+            <p id="processingStepText" class="text-xs text-slate-500">Đang upload và đọc ngữ âm qua Gemini File API...</p>
+          </div>
+          <div class="max-w-xs mx-auto bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+            <div class="bg-blue-600 h-full w-2/3 animate-pulse rounded-full"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 2: Meeting Detail View -->
+      <section id="detailSection" class="hidden max-w-4xl mx-auto space-y-6">
+        
+        <!-- Header & Action Bar -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span id="detailLanguageBadge" class="text-[11px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">VI</span>
+                <span id="detailDate" class="text-xs text-slate-400">16/09/2026</span>
+                <span id="detailDuration" class="text-xs text-slate-400">• ~25 phút</span>
+              </div>
+              <h2 id="detailTitle" class="text-2xl font-bold text-slate-900 tracking-tight">Họp Sprint Review & Kế Hoạch Tuần</h2>
+            </div>
+
+            <!-- Toolbar Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btnCopyAll" class="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center space-x-1.5 transition-colors">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                <span>Copy Markdown</span>
+              </button>
+              <button id="btnDownloadMd" class="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg flex items-center space-x-1.5 transition-colors">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>Tải File .md</span>
+              </button>
+              <button id="btnDeleteMeeting" class="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg flex items-center space-x-1.5 transition-colors">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Xóa</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Built-in Audio Player -->
+          <div id="audioPlayerContainer" class="pt-2 border-t border-slate-100">
+            <div class="flex items-center space-x-3">
+              <i data-lucide="volume-2" class="w-4 h-4 text-slate-400 shrink-0"></i>
+              <audio id="meetingAudioPlayer" controls class="w-full h-9 rounded-lg"></audio>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 1: Executive Summary -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+            <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+            <span>Tóm Tắt Tổng Quan (Executive Summary)</span>
+          </div>
+          <p id="detailExecutiveSummary" class="text-xs md:text-sm text-slate-700 leading-relaxed bg-slate-50/70 p-4 rounded-xl border border-slate-100">
+            Nội dung tóm tắt...
+          </p>
+        </div>
+
+        <!-- Section 2: Key Decisions -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+            <i data-lucide="scale" class="w-4 h-4 text-emerald-600"></i>
+            <span>Quyết Định Then Chốt (Key Decisions)</span>
+          </div>
+          <ul id="detailDecisionsList" class="space-y-2 text-xs md:text-sm text-slate-700">
+            <!-- Populated dynamically -->
+          </ul>
+        </div>
+
+        <!-- Section 3: Action Items Checklist (Interactive) -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+              <i data-lucide="check-square" class="w-4 h-4 text-indigo-600"></i>
+              <span>Nhiệm Vụ & Phân Công (Action Items)</span>
+            </div>
+            <span id="actionItemsProgressBadge" class="text-xs bg-indigo-50 text-indigo-700 font-medium px-2.5 py-0.5 rounded-full">0/0 Đã xong</span>
+          </div>
+          <div id="detailActionItemsList" class="divide-y divide-slate-100">
+            <!-- Action item rows populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Section 4: Topics Breakdown -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+            <i data-lucide="layers" class="w-4 h-4 text-amber-600"></i>
+            <span>Chi Tiết Từng Chủ Đề (Topics Breakdown)</span>
+          </div>
+          <div id="detailTopicsContainer" class="space-y-3">
+            <!-- Topic cards populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Section 5: Transcript (Optional / Collapsible) -->
+        <div id="transcriptCard" class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-slate-900 font-bold text-sm">
+              <i data-lucide="message-square" class="w-4 h-4 text-slate-500"></i>
+              <span>Lược Sử Đối Thoại (Transcript Highlights)</span>
+            </div>
+            <button id="btnToggleTranscript" class="text-xs text-blue-600 hover:underline">Thu gọn</button>
+          </div>
+          <div id="detailTranscriptList" class="space-y-2 max-h-96 overflow-y-auto pr-2 text-xs">
+            <!-- Dialogue rows populated dynamically -->
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- API Key Modal -->
+  <div id="apiKeyModal" class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-slate-100">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <i data-lucide="key" class="w-4 h-4"></i>
+          </div>
+          <h3 class="font-bold text-slate-900 text-sm">Cấu Hình Gemini API Key</h3>
+        </div>
+        <button id="btnCloseModal" class="text-slate-400 hover:text-slate-600">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <p class="text-xs text-slate-500">API Key được lưu an toàn trong trình duyệt hoặc file `.env` trên máy của bạn. Hoàn toàn miễn phí trên Google AI Studio.</p>
+      <div>
+        <input id="inputApiKeyModal" type="password" placeholder="AIzaSy..." class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500">
+      </div>
+      <div class="flex items-center justify-between pt-2">
+        <a href="https://aistudio.google.com/apikey" target="_blank" class="text-xs text-blue-600 hover:underline flex items-center space-x-1">
+          <span>Lấy key miễn phí tại Google AI Studio</span>
+          <i data-lucide="external-link" class="w-3 h-3"></i>
+        </a>
+        <button id="btnSaveApiKey" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm">Lưu Key</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="hidden fixed bottom-6 right-6 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl flex items-center space-x-2 z-50 transition-all">
+    <i id="toastIcon" data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toastMessage">Thông báo</span>
+  </div>
+
+  <script src="/public/app.js"></script>
+</body>
+</html>
