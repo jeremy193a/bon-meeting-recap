@@ -108,6 +108,7 @@ const meetingAudioPlayer = document.getElementById('meetingAudioPlayer');
 
 const btnCopyAll = document.getElementById('btnCopyAll');
 const btnDownloadMd = document.getElementById('btnDownloadMd');
+const btnDownloadWord = document.getElementById('btnDownloadWord');
 const btnDownloadExcel = document.getElementById('btnDownloadExcel');
 const btnDeleteMeeting = document.getElementById('btnDeleteMeeting');
 
@@ -683,6 +684,13 @@ btnDownloadMd.addEventListener('click', () => {
   if (!currentMeetingId) return;
   window.location.href = `/api/meetings/${currentMeetingId}/markdown`;
 });
+
+if (btnDownloadWord) {
+  btnDownloadWord.addEventListener('click', () => {
+    if (!currentMeetingId) return;
+    window.location.href = `/api/meetings/${currentMeetingId}/word`;
+  });
+}
 
 if (btnDownloadExcel) {
   btnDownloadExcel.addEventListener('click', () => {

@@ -8,6 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.js';
 import { generateMeetingExcel } from './services/excel.js';
+import { generateMeetingWord } from './services/word.js';
 import { processAudioToRecap } from './services/gemini.js';
 import {
   deleteMeeting,
@@ -123,6 +124,37 @@ app.get('/api/meetings/:id/excel', async (c) => {
   } catch (err) {
     console.error(`[API] Failed to generate Excel for ${id}:`, err);
     return c.json({ error: 'Failed to generate Excel file' }, 500);
+  }
+});
+
+/**
+ * Export meeting recap to Microsoft Word (.docx)
+ */
+app.get('/api/meetings/:id/word', async (c) => {
+  const id = c.req.param('id');
+  try {
+    const meeting = await getMeeting(id);
+    if (!meeting) {
+      return c.json({ error: 'Meeting not found' }, 404);
+    }
+
+    const wordBuffer = await generateMeetingWord(meeting);
+    const safeTitle = (meeting.title || 'bien-ban-cuoc-hop')
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 40);
+
+    c.header(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    );
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="${safeTitle}-recap.docx"`,
+    );
+    return c.body(new Uint8Array(wordBuffer));
+  } catch (err) {
+    console.error(`[API] Failed to generate Word doc for ${id}:`, err);
+    return c.json({ error: 'Failed to generate Word document' }, 500);
   }
 });
 
