@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "build": "tsc"
+    "build": "tsc",
+    "tunnel": "cloudflared tunnel --config ~/.cloudflared/recap.yml run recap.quangha.me"
   },
   "type": "module",
 
