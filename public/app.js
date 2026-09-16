@@ -25,6 +25,35 @@ const searchInput = document.getElementById('searchInput');
 const meetingsList = document.getElementById('meetingsList');
 const emptyListState = document.getElementById('emptyListState');
 
+// Mobile drawer elements
+const btnOpenMobileDrawer = document.getElementById('btnOpenMobileDrawer');
+const btnCloseMobileDrawer = document.getElementById('btnCloseMobileDrawer');
+const drawerBackdrop = document.getElementById('drawerBackdrop');
+const sidebarDrawer = document.getElementById('sidebarDrawer');
+const btnMobileBack = document.getElementById('btnMobileBack');
+
+function openDrawer() {
+  sidebarDrawer.classList.remove('-translate-x-full');
+  drawerBackdrop.classList.remove('hidden');
+}
+
+function closeDrawer() {
+  sidebarDrawer.classList.add('-translate-x-full');
+  drawerBackdrop.classList.add('hidden');
+}
+
+if (btnOpenMobileDrawer) btnOpenMobileDrawer.addEventListener('click', openDrawer);
+if (btnCloseMobileDrawer) btnCloseMobileDrawer.addEventListener('click', closeDrawer);
+if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeDrawer);
+if (btnMobileBack) {
+  btnMobileBack.addEventListener('click', () => {
+    currentMeetingId = null;
+    detailSection.classList.add('hidden');
+    uploadSection.classList.remove('hidden');
+    openDrawer();
+  });
+}
+
 const uploadSection = document.getElementById('uploadSection');
 const detailSection = document.getElementById('detailSection');
 
@@ -398,6 +427,7 @@ searchInput.addEventListener('input', (e) => {
 
 // View Meeting Detail
 async function viewMeeting(id) {
+  closeDrawer();
   currentMeetingId = id;
   renderMeetingsList(allMeetings);
 
@@ -529,17 +559,17 @@ function renderActionItems(meeting) {
     const isChecked = Boolean(item.completed);
 
     row.innerHTML = `
-      <div class="flex items-start space-x-3 flex-1">
-        <input type="checkbox" ${isChecked ? 'checked' : ''} class="mt-1 w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer">
-        <div class="space-y-0.5">
-          <p class="text-xs font-medium text-slate-800 ${isChecked ? 'line-through text-slate-400' : ''}">${escapeHtml(item.task)}</p>
-          <div class="flex items-center space-x-3 text-[11px] text-slate-400">
-            ${item.assignee ? `<span>👤 Phụ trách: <strong class="text-slate-700">${escapeHtml(item.assignee)}</strong></span>` : ''}
-            ${item.dueDate ? `<span>📅 Hạn: <strong class="text-slate-700">${escapeHtml(item.dueDate)}</strong></span>` : ''}
+      <label class="flex items-start space-x-3 flex-1 cursor-pointer select-none py-1">
+        <input type="checkbox" ${isChecked ? 'checked' : ''} class="mt-0.5 w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer shrink-0">
+        <div class="space-y-0.5 min-w-0 flex-1">
+          <p class="text-xs font-medium text-slate-800 break-words leading-relaxed ${isChecked ? 'line-through text-slate-400' : ''}">${escapeHtml(item.task)}</p>
+          <div class="flex items-center space-x-2.5 text-[11px] text-slate-400 flex-wrap gap-y-0.5">
+            ${item.assignee ? `<span>👤 <strong class="text-slate-700">${escapeHtml(item.assignee)}</strong></span>` : ''}
+            ${item.dueDate ? `<span>📅 <strong class="text-slate-700">${escapeHtml(item.dueDate)}</strong></span>` : ''}
           </div>
         </div>
-      </div>
-      <div class="shrink-0">
+      </label>
+      <div class="shrink-0 pt-1">
         ${priorityBadge}
       </div>
     `;
@@ -566,6 +596,7 @@ function renderActionItems(meeting) {
 
 // Actions in detail view
 btnNewRecap.addEventListener('click', () => {
+  closeDrawer();
   currentMeetingId = null;
   detailSection.classList.add('hidden');
   uploadSection.classList.remove('hidden');
