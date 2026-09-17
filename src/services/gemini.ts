@@ -152,29 +152,74 @@ export async function processAudioToRecap(
   }
 
   try {
-    console.log(`[Gemini] Generating recap using model: ${config.geminiModel}...`);
     const prompt = buildPrompt({ attendees, meetingGoal, customPrompt });
+    let responseText: string | undefined;
+    let lastError: unknown;
 
-    const response = await ai.models.generateContent({
-      model: config.geminiModel,
-      contents: [
-        {
-          fileData: {
-            fileUri,
-            mimeType: file.mimeType ?? mimeType,
-          },
-        },
-        prompt,
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.2,
-      },
-    });
+    const modelsToTry = Array.from(new Set([config.geminiModel, 'gemini-3.5-flash']));
 
-    const responseText = response.text;
+    for (const modelName of modelsToTry) {
+      let attempts = 0;
+      const maxAttempts = 3;
+
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          console.log(`[Gemini] Generating recap using model: ${modelName} (attempt ${attempts}/${maxAttempts})...`);
+          const response = await ai.models.generateContent({
+            model: modelName,
+            contents: [
+              {
+                fileData: {
+                  fileUri,
+                  mimeType: file.mimeType ?? mimeType,
+                },
+              },
+              prompt,
+            ],
+            config: {
+              responseMimeType: 'application/json',
+              temperature: 0.2,
+            },
+          });
+
+          responseText = response.text;
+          if (responseText) {
+            console.log(`[Gemini] Successfully received response from ${modelName}`);
+            break;
+          }
+        } catch (err: unknown) {
+          lastError = err;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isRetryable =
+            errMsg.includes('503') ||
+            errMsg.includes('429') ||
+            errMsg.includes('high demand') ||
+            errMsg.includes('UNAVAILABLE') ||
+            errMsg.includes('RESOURCE_EXHAUSTED');
+
+          if (isRetryable && attempts < maxAttempts) {
+            const backoffMs = attempts * 4000;
+            console.warn(`[Gemini] ${modelName} encountered temporary spike (503/429). Retrying in ${backoffMs / 1000}s...`);
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          } else {
+            console.warn(`[Gemini] ${modelName} attempt ${attempts} failed: ${errMsg.slice(0, 100)}`);
+            break; // Try next fallback model
+          }
+        }
+      }
+
+      if (responseText) {
+        break; // Successfully got response
+      }
+    }
+
     if (!responseText) {
-      throw new Error('Empty response received from Gemini.');
+      const errMsg = lastError instanceof Error ? lastError.message : String(lastError);
+      if (errMsg.includes('503') || errMsg.includes('high demand')) {
+        throw new Error('Hệ thống AI Google đang bị nghẽn tải tạm thời với file lớn (503 High Demand). Vui lòng thử lại sau 1-2 phút.');
+      }
+      throw new Error(`Không thể tạo recap sau khi thử lại: ${errMsg}`);
     }
 
     console.log('[Gemini] Response received. Parsing structured output...');
