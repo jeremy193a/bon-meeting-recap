@@ -13,6 +13,10 @@ export interface ActionItem {
   priority: Priority;
   description?: string;
   completed?: boolean;
+  dod?: string;
+  gate?: string;
+  category?: string;
+  dependencies?: string;
 }
 
 export interface OpenQuestion {
@@ -48,13 +52,26 @@ export interface MeetingRecapData {
   transcript?: MeetingTranscriptSegment[];
 }
 
+export interface OdooProjectRef {
+  projectId: number;
+  projectName: string;
+  projectUrl: string;
+  pushedBy: string;
+  pushedAt: string;
+  tasksCount: number;
+  profileName: string;
+}
+
 export interface MeetingRecord {
   id: string;
   title: string;
   createdAt: string;
+  ownerId?: number;
+  ownerEmail?: string;
   audioFileName?: string;
   audioMimeType?: string;
   audioDurationSeconds?: number;
+  odooProject?: OdooProjectRef;
   recap: MeetingRecapData;
 }
 
@@ -63,7 +80,26 @@ export interface MeetingSummaryItem {
   title: string;
   createdAt: string;
   language: string;
+  ownerId?: number;
   actionItemsCount: number;
   decisionsCount: number;
   executiveSummaryPreview: string;
+  odooProjectUrl?: string;
+}
+
+export interface OdooUser {
+  id: number;
+  name: string;
+  login: string;
+  email: string;
+  companyId?: number;
+  companyName?: string;
+}
+
+export interface UserSession {
+  uid: number;
+  name: string;
+  email: string;
+  profile: string; // 'skillbon' | 'prod'
+  issuedAt: number;
 }

@@ -40,10 +40,22 @@
 
     <!-- Actions -->
     <div class="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
+      <!-- User Profile & Logout -->
+      <div id="userProfileBar" class="hidden flex items-center space-x-2">
+        <div class="flex items-center space-x-1.5 px-2.5 py-1 bg-slate-100 rounded-lg text-xs">
+          <div id="userAvatar" class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">H</div>
+          <span id="userNameDisplay" class="font-medium text-slate-700 max-w-[120px] truncate">Hà</span>
+          <span id="userEnvBadge" class="text-[9px] font-bold px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded uppercase">skillbon</span>
+        </div>
+        <button id="btnLogout" title="Đăng xuất" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+        </button>
+      </div>
+
       <!-- API Key button -->
       <button id="btnApiKey" class="flex items-center space-x-1 sm:space-x-2 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 hover:bg-slate-50 transition-colors">
         <span id="apiKeyDot" class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-        <span id="apiKeyLabel" class="hidden sm:inline">Gemini API Key</span>
+        <span id="apiKeyLabel" class="hidden sm:inline">Gemini Key</span>
         <i data-lucide="key" class="w-3.5 h-3.5 text-slate-500 sm:hidden"></i>
       </button>
 
@@ -245,10 +257,29 @@
                 <span class="text-slate-400 font-medium">Tham dự:</span>
                 <div id="detailAttendeesList" class="flex items-center gap-1 flex-wrap"></div>
               </div>
+            <!-- Odoo Project Linked Banner -->
+            <div id="odooProjectBanner" class="hidden p-3 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/80 rounded-xl flex items-center justify-between gap-3 flex-wrap">
+              <div class="flex items-center space-x-2.5 min-w-0">
+                <div class="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-purple-500/30">
+                  <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                </div>
+                <div class="min-w-0">
+                  <p class="text-xs font-bold text-purple-900 truncate" id="odooBannerTitle">Đã liên kết Dự án Odoo</p>
+                  <p class="text-[11px] text-purple-700 truncate" id="odooBannerMeta">Đang cập nhật...</p>
+                </div>
+              </div>
+              <a id="odooBannerLink" href="#" target="_blank" class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shrink-0 transition-colors shadow-sm">
+                <span>Mở Trên Odoo</span>
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              </a>
             </div>
 
             <!-- Toolbar Buttons -->
             <div class="flex items-center gap-2 flex-wrap pt-1">
+              <button id="btnOpenOdooModal" class="flex-1 sm:flex-none justify-center px-3.5 py-2 sm:py-1.5 text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 active:from-purple-800 active:to-indigo-800 text-white rounded-lg flex items-center space-x-1.5 transition-all min-h-[36px] shadow-sm shadow-purple-600/25 ring-1 ring-purple-500/30">
+                <i data-lucide="upload-cloud" class="w-3.5 h-3.5 shrink-0"></i>
+                <span>🚀 Đẩy Odoo Project</span>
+              </button>
               <button id="btnDownloadWord" class="flex-1 sm:flex-none justify-center px-3 py-2 sm:py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-lg flex items-center space-x-1.5 transition-colors min-h-[36px] shadow-sm shadow-blue-600/20">
                 <i data-lucide="file-text" class="w-3.5 h-3.5 shrink-0"></i>
                 <span>Xuất Word (.docx)</span>
@@ -393,6 +424,171 @@
         </a>
         <button id="btnSaveApiKey" class="w-full sm:w-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm">Lưu Key</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Login Modal (Odoo SSO) -->
+  <div id="loginModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-5 border border-slate-100">
+      <div class="text-center space-y-2">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <h2 class="text-xl font-bold text-slate-900 tracking-tight">Đăng Nhập Tài Khoản Odoo</h2>
+        <p class="text-xs text-slate-500 leading-relaxed">Mỗi nhân viên chỉ thấy file và ghi âm của chính mình. Dữ liệu được bảo mật và cách ly 100%.</p>
+      </div>
+
+      <!-- Login Error Alert -->
+      <div id="loginErrorAlert" class="hidden p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center space-x-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 text-red-500"></i>
+        <span id="loginErrorText">Lỗi đăng nhập</span>
+      </div>
+
+      <form id="loginForm" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Email Đăng Nhập Odoo</label>
+          <div class="relative">
+            <i data-lucide="mail" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+            <input id="loginEmailInput" type="email" required placeholder="name.lastname@bonario.vn" class="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Mật Khẩu Odoo / API Key</label>
+          <div class="relative">
+            <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+            <input id="loginPasswordInput" type="password" required placeholder="••••••••" class="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Môi Trường Odoo</label>
+          <select id="loginProfileSelect" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-medium text-slate-700">
+            <option value="skillbon" selected>Môi trường Thử nghiệm (skillbon.odoo.com)</option>
+            <option value="prod">Môi trường Chính thức (bonario-vietnam.odoo.com)</option>
+          </select>
+        </div>
+
+        <button id="btnSubmitLogin" type="submit" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs rounded-xl shadow-md shadow-blue-500/25 transition-all flex items-center justify-center space-x-2 min-h-[42px]">
+          <span>Đăng Nhập</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+
+      <div class="pt-2 border-t border-slate-100 text-center">
+        <p class="text-[11px] text-slate-400">
+          🔒 Xác thực an toàn qua giao thức Odoo JSON-RPC. Mật khẩu không bao giờ được lưu trữ trên server.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Push to Odoo Review Modal (Human-in-the-loop & Disclaimer) -->
+  <div id="odooModal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-7 shadow-2xl space-y-4 border border-slate-100 my-auto">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base">Khởi Tạo Dự Án Lên Odoo (Human Review)</h3>
+            <p class="text-xs text-slate-500">Rà soát danh sách công việc trước khi nạp vào quy trình ERP của công ty</p>
+          </div>
+        </div>
+        <button id="btnCloseOdooModal" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Step 1: Normal View -->
+      <div id="odooModalNormalView" class="space-y-4">
+        <!-- Project Config -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Tên Dự Án Trên Odoo</label>
+            <input id="odooProjectNameInput" type="text" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Môi Trường Odoo</label>
+            <select id="odooProfileSelect" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 font-medium text-slate-700">
+              <option value="skillbon" selected>Server Thử nghiệm (skillbon.odoo.com)</option>
+              <option value="prod">Server Chính thức (bonario-vietnam.odoo.com)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Task Preview Box -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+              <span>Danh Sách Tasks Sẽ Tạo</span>
+              <span id="odooModalTaskCountBadge" class="text-[10px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.2 rounded-full">0 tasks</span>
+            </span>
+            <button id="btnModalDownloadExcel" type="button" class="text-xs text-emerald-700 hover:text-emerald-800 font-semibold flex items-center space-x-1 hover:underline">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Tải Excel WBS Kiểm Tra</span>
+            </button>
+          </div>
+          <div id="odooTasksPreviewList" class="max-h-56 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-50/50 p-2 text-xs space-y-1">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Disclaimer Box (Mandatory Checkbox) -->
+        <div class="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+          <label class="flex items-start space-x-3 cursor-pointer select-none">
+            <input type="checkbox" id="chkOdooDisclaimer" class="mt-0.5 w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500">
+            <span class="text-xs text-amber-950 leading-relaxed font-medium">
+              Tôi xác nhận đã rà soát kỹ lưỡng danh sách công việc, người phụ trách và thời hạn. Tôi chịu trách nhiệm hoàn toàn về dữ liệu khi khởi tạo lên hệ thống Odoo công ty.
+            </span>
+          </label>
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="flex items-center justify-end space-x-2 pt-2">
+          <button id="btnCancelOdooModal" type="button" class="px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            Hủy Bỏ
+          </button>
+          <button id="btnConfirmPushOdoo" type="button" disabled class="px-5 py-2.5 text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 active:from-purple-700 active:to-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl shadow-md shadow-purple-600/20 transition-all flex items-center space-x-1.5 min-h-[40px]">
+            <i data-lucide="rocket" class="w-4 h-4"></i>
+            <span>Xác Nhận & Khởi Tạo Dự Án Lên Odoo</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Loading State -->
+      <div id="odooModalLoadingView" class="hidden py-10 text-center space-y-4">
+        <div class="w-12 h-12 mx-auto rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin"></div>
+        <div class="space-y-1">
+          <h4 class="text-sm font-bold text-slate-900">Đang Khởi Tạo Dự Án Lên Odoo...</h4>
+          <p class="text-xs text-slate-500">Đang uỷ quyền API Key tạm thời, nhân bản Scrum template và tạo tasks theo danh tính của bạn.</p>
+        </div>
+      </div>
+
+      <!-- Step 3: Success State -->
+      <div id="odooModalSuccessView" class="hidden py-8 text-center space-y-5">
+        <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <i data-lucide="check-circle" class="w-8 h-8"></i>
+        </div>
+        <div class="space-y-1">
+          <h4 class="text-base font-bold text-slate-900">Khởi Tạo Dự Án Thành Công!</h4>
+          <p id="odooSuccessProjectName" class="text-xs text-slate-600 font-medium">Tên dự án: ...</p>
+          <p id="odooSuccessMeta" class="text-xs text-slate-400">Đã tạo thành công X tasks trên Odoo.</p>
+        </div>
+        <div class="flex items-center justify-center space-x-3 pt-2">
+          <a id="odooSuccessLink" href="#" target="_blank" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 flex items-center space-x-2 transition-all">
+            <span>Mở Dự Án Trên Odoo Ngay</span>
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+          </a>
+          <button id="btnCloseOdooSuccessModal" type="button" class="px-4 py-2.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
+            Đóng
+          </button>
+        </div>
+      </div>
+
     </div>
   </div>
 

@@ -1,6 +1,8 @@
-// Bon Meeting Recap — Frontend Client Logic
+// Bon Meeting Recap — Frontend Client Logic (Odoo SSO & Lean Architecture)
 
+let currentUser = null;
 let currentMeetingId = null;
+let currentMeetingData = null;
 let allMeetings = [];
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -9,7 +11,23 @@ let recordSeconds = 0;
 let recordedAudioBlob = null;
 let serverHasKey = false;
 
-// DOM Elements
+// DOM Elements — Auth & User Profile
+const loginModal = document.getElementById('loginModal');
+const loginForm = document.getElementById('loginForm');
+const loginEmailInput = document.getElementById('loginEmailInput');
+const loginPasswordInput = document.getElementById('loginPasswordInput');
+const loginProfileSelect = document.getElementById('loginProfileSelect');
+const loginErrorAlert = document.getElementById('loginErrorAlert');
+const loginErrorText = document.getElementById('loginErrorText');
+const btnSubmitLogin = document.getElementById('btnSubmitLogin');
+
+const userProfileBar = document.getElementById('userProfileBar');
+const userAvatar = document.getElementById('userAvatar');
+const userNameDisplay = document.getElementById('userNameDisplay');
+const userEnvBadge = document.getElementById('userEnvBadge');
+const btnLogout = document.getElementById('btnLogout');
+
+// DOM Elements — Header & Key
 const btnApiKey = document.getElementById('btnApiKey');
 const apiKeyDot = document.getElementById('apiKeyDot');
 const apiKeyLabel = document.getElementById('apiKeyLabel');
@@ -48,6 +66,7 @@ if (drawerBackdrop) drawerBackdrop.addEventListener('click', closeDrawer);
 if (btnMobileBack) {
   btnMobileBack.addEventListener('click', () => {
     currentMeetingId = null;
+    currentMeetingData = null;
     detailSection.classList.add('hidden');
     uploadSection.classList.remove('hidden');
     openDrawer();
@@ -112,6 +131,32 @@ const btnDownloadWord = document.getElementById('btnDownloadWord');
 const btnDownloadExcel = document.getElementById('btnDownloadExcel');
 const btnDeleteMeeting = document.getElementById('btnDeleteMeeting');
 
+// Odoo Banner & Modal Elements
+const odooProjectBanner = document.getElementById('odooProjectBanner');
+const odooBannerTitle = document.getElementById('odooBannerTitle');
+const odooBannerMeta = document.getElementById('odooBannerMeta');
+const odooBannerLink = document.getElementById('odooBannerLink');
+const btnOpenOdooModal = document.getElementById('btnOpenOdooModal');
+
+const odooModal = document.getElementById('odooModal');
+const btnCloseOdooModal = document.getElementById('btnCloseOdooModal');
+const btnCancelOdooModal = document.getElementById('btnCancelOdooModal');
+const odooProjectNameInput = document.getElementById('odooProjectNameInput');
+const odooProfileSelect = document.getElementById('odooProfileSelect');
+const odooTasksPreviewList = document.getElementById('odooTasksPreviewList');
+const odooModalTaskCountBadge = document.getElementById('odooModalTaskCountBadge');
+const btnModalDownloadExcel = document.getElementById('btnModalDownloadExcel');
+const chkOdooDisclaimer = document.getElementById('chkOdooDisclaimer');
+const btnConfirmPushOdoo = document.getElementById('btnConfirmPushOdoo');
+
+const odooModalNormalView = document.getElementById('odooModalNormalView');
+const odooModalLoadingView = document.getElementById('odooModalLoadingView');
+const odooModalSuccessView = document.getElementById('odooModalSuccessView');
+const odooSuccessProjectName = document.getElementById('odooSuccessProjectName');
+const odooSuccessMeta = document.getElementById('odooSuccessMeta');
+const odooSuccessLink = document.getElementById('odooSuccessLink');
+const btnCloseOdooSuccessModal = document.getElementById('btnCloseOdooSuccessModal');
+
 // Toast
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
@@ -124,10 +169,124 @@ function showToast(msg, isError = false) {
   toast.classList.remove('hidden');
   setTimeout(() => {
     toast.classList.add('hidden');
-  }, 3000);
+  }, 3500);
 }
 
-// Check API Key
+// =========================================================================
+// 1. Odoo Authentication & SSO Management
+// =========================================================================
+
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (data.authenticated && data.user) {
+      currentUser = data.user;
+      renderUserBar();
+      loginModal.classList.add('hidden');
+      await checkConfig();
+      await loadMeetings();
+      return true;
+    }
+  } catch (err) {
+    console.error('Auth check error:', err);
+  }
+
+  // Not authenticated -> show login modal
+  currentUser = null;
+  userProfileBar.classList.add('hidden');
+  loginModal.classList.remove('hidden');
+  return false;
+}
+
+function renderUserBar() {
+  if (!currentUser) return;
+  userProfileBar.classList.remove('hidden');
+  const initial = (currentUser.name || 'U').trim().charAt(0).toUpperCase();
+  userAvatar.textContent = initial;
+  userNameDisplay.textContent = currentUser.name || currentUser.email;
+  userEnvBadge.textContent = currentUser.profile || 'skillbon';
+}
+
+if (loginForm) {
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginErrorAlert.classList.add('hidden');
+
+    const email = loginEmailInput.value.trim();
+    const password = loginPasswordInput.value.trim();
+    const profile = loginProfileSelect.value;
+
+    if (!email || !password) {
+      loginErrorText.textContent = 'Vui lòng điền đầy đủ Email và Mật khẩu Odoo.';
+      loginErrorAlert.classList.remove('hidden');
+      return;
+    }
+
+    btnSubmitLogin.disabled = true;
+    btnSubmitLogin.innerHTML = `
+      <div class="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin"></div>
+      <span>Đang xác thực qua Odoo...</span>
+    `;
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: email, password, profile }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Email hoặc mật khẩu Odoo không chính xác.');
+      }
+
+      currentUser = data.user;
+      renderUserBar();
+      loginModal.classList.add('hidden');
+      loginPasswordInput.value = '';
+      showToast(`Xin chào ${currentUser.name}!`);
+
+      await checkConfig();
+      await loadMeetings();
+    } catch (err) {
+      console.error('Login error:', err);
+      loginErrorText.textContent = err.message || 'Không thể đăng nhập. Kiểm tra kết nối mạng.';
+      loginErrorAlert.classList.remove('hidden');
+    } finally {
+      btnSubmitLogin.disabled = false;
+      btnSubmitLogin.innerHTML = `
+        <span>Đăng Nhập</span>
+        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+      `;
+      if (window.lucide) lucide.createIcons();
+    }
+  });
+}
+
+if (btnLogout) {
+  btnLogout.addEventListener('click', async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    currentUser = null;
+    currentMeetingId = null;
+    currentMeetingData = null;
+    userProfileBar.classList.add('hidden');
+    detailSection.classList.add('hidden');
+    uploadSection.classList.remove('hidden');
+    meetingsList.innerHTML = '';
+    emptyListState.classList.remove('hidden');
+    meetingsList.appendChild(emptyListState);
+    loginModal.classList.remove('hidden');
+    showToast('Đã đăng xuất.');
+  });
+}
+
+// =========================================================================
+// 2. Gemini Config & API Key
+// =========================================================================
+
 async function checkConfig() {
   try {
     const res = await fetch('/api/config');
@@ -141,7 +300,7 @@ async function checkConfig() {
       apiKeyBanner.classList.add('hidden');
     } else {
       apiKeyDot.className = 'w-2 h-2 rounded-full bg-amber-400';
-      apiKeyLabel.textContent = 'Thiếu API Key';
+      apiKeyLabel.textContent = 'Thiếu Key';
       apiKeyBanner.classList.remove('hidden');
     }
   } catch (err) {
@@ -153,7 +312,6 @@ function getActiveApiKey() {
   return localStorage.getItem('gemini_api_key') || null;
 }
 
-// Modal handling
 btnApiKey.addEventListener('click', () => {
   inputApiKeyModal.value = localStorage.getItem('gemini_api_key') || '';
   apiKeyModal.classList.remove('hidden');
@@ -182,7 +340,10 @@ btnToggleAdvanced.addEventListener('click', () => {
   advancedArrow.classList.toggle('rotate-180');
 });
 
-// Mode Switching (Upload vs Record)
+// =========================================================================
+// 3. Mode Switching (Upload vs Record)
+// =========================================================================
+
 tabUploadMode.addEventListener('click', () => {
   tabUploadMode.className = 'flex-1 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition-all flex items-center justify-center space-x-1.5';
   tabRecordMode.className = 'flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center justify-center space-x-1.5';
@@ -199,102 +360,131 @@ tabRecordMode.addEventListener('click', () => {
   updateSubmitState();
 });
 
+function updateSubmitState() {
+  const isUploadMode = !dropZoneContainer.classList.contains('hidden');
+  if (isUploadMode) {
+    btnSubmitRecap.disabled = !audioFileInput.files || audioFileInput.files.length === 0;
+  } else {
+    btnSubmitRecap.disabled = !recordedAudioBlob;
+  }
+}
+
 // File Drag & Drop
 dropZone.addEventListener('click', () => audioFileInput.click());
+audioFileInput.addEventListener('change', () => {
+  if (audioFileInput.files && audioFileInput.files[0]) {
+    handleFileSelected(audioFileInput.files[0]);
+  }
+});
+
 dropZone.addEventListener('dragover', (e) => {
   e.preventDefault();
-  dropZone.classList.add('border-blue-500', 'bg-blue-50/30');
+  dropZone.classList.add('border-blue-500', 'bg-blue-50/50');
 });
+
 dropZone.addEventListener('dragleave', () => {
-  dropZone.classList.remove('border-blue-500', 'bg-blue-50/30');
+  dropZone.classList.remove('border-blue-500', 'bg-blue-50/50');
 });
+
 dropZone.addEventListener('drop', (e) => {
   e.preventDefault();
-  dropZone.classList.remove('border-blue-500', 'bg-blue-50/30');
+  dropZone.classList.remove('border-blue-500', 'bg-blue-50/50');
   if (e.dataTransfer.files && e.dataTransfer.files[0]) {
     audioFileInput.files = e.dataTransfer.files;
     handleFileSelected(e.dataTransfer.files[0]);
   }
 });
-audioFileInput.addEventListener('change', (e) => {
-  if (e.target.files && e.target.files[0]) {
-    handleFileSelected(e.target.files[0]);
-  }
-});
 
 function handleFileSelected(file) {
   selectedFileName.textContent = file.name;
-  const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-  selectedFileSize.textContent = `(${sizeMb} MB)`;
+  selectedFileSize.textContent = formatBytes(file.size);
   selectedFileInfo.classList.remove('hidden');
+  if (!meetingTitleInput.value.trim()) {
+    meetingTitleInput.value = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+  }
   updateSubmitState();
 }
 
-// In-Browser Audio Recording
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Audio Recording (In-Browser)
 btnStartRecord.addEventListener('click', async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
     recordedChunks = [];
+    recordedAudioBlob = null;
+    recordedAudioPreview.classList.add('hidden');
+
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+      ? 'audio/webm'
+      : 'audio/mp4';
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
 
     mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) recordedChunks.push(e.data);
     };
 
     mediaRecorder.onstop = () => {
-      recordedAudioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+      recordedAudioBlob = new Blob(recordedChunks, { type: mimeType });
       recordedAudioPreview.src = URL.createObjectURL(recordedAudioBlob);
       recordedAudioPreview.classList.remove('hidden');
-      recordStatusText.textContent = 'Ghi âm hoàn tất. Sẵn sàng xử lý!';
       updateSubmitState();
+      stream.getTracks().forEach((track) => track.stop());
     };
 
-    mediaRecorder.start();
+    mediaRecorder.start(1000);
+
     recordSeconds = 0;
     recordTimer.textContent = '00:00';
+    recordStatusText.textContent = 'Đang ghi âm trực tiếp...';
+    recordPing.classList.remove('hidden');
+    btnStartRecord.classList.add('hidden');
+    btnStopRecord.classList.remove('hidden');
+
     recordInterval = setInterval(() => {
       recordSeconds++;
       const mins = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
       const secs = String(recordSeconds % 60).padStart(2, '0');
       recordTimer.textContent = `${mins}:${secs}`;
     }, 1000);
-
-    btnStartRecord.disabled = true;
-    btnStopRecord.disabled = false;
-    recordPing.classList.remove('hidden');
-    recordStatusText.textContent = 'Đang ghi âm cuộc họp... Bấm Dừng khi hoàn thành.';
   } catch (err) {
-    console.error('Microphone access error:', err);
-    showToast('Không thể truy cập Microphone. Vui lòng cấp quyền trong trình duyệt!', true);
+    console.error('Microphone error:', err);
+    showToast('Không thể truy cập Microphone! Vui lòng cấp quyền.', true);
   }
 });
 
 btnStopRecord.addEventListener('click', () => {
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
-    clearInterval(recordInterval);
-    btnStartRecord.disabled = false;
-    btnStopRecord.disabled = true;
-    recordPing.classList.add('hidden');
   }
+  clearInterval(recordInterval);
+  recordPing.classList.add('hidden');
+  recordStatusText.textContent = 'Ghi âm hoàn tất! Bạn có thể nghe thử lại.';
+  btnStartRecord.classList.remove('hidden');
+  btnStopRecord.classList.add('hidden');
 });
 
-function updateSubmitState() {
-  const isUploadMode = !dropZoneContainer.classList.contains('hidden');
-  const hasUploadFile = audioFileInput.files && audioFileInput.files[0];
-  const hasRecordedFile = Boolean(recordedAudioBlob);
+// =========================================================================
+// 4. Meeting Process & Upload
+// =========================================================================
 
-  if ((isUploadMode && hasUploadFile) || (!isUploadMode && hasRecordedFile)) {
-    btnSubmitRecap.disabled = false;
-  } else {
-    btnSubmitRecap.disabled = true;
-  }
-}
-
-// Form Submission
 processForm.addEventListener('submit', async (e) => {
   e.preventDefault();
+
+  if (!currentUser) {
+    loginModal.classList.remove('hidden');
+    showToast('Vui lòng đăng nhập Odoo trước!', true);
+    return;
+  }
 
   const isUploadMode = !dropZoneContainer.classList.contains('hidden');
   let audioFile = null;
@@ -322,7 +512,8 @@ processForm.addEventListener('submit', async (e) => {
   }
 
   const formData = new FormData();
-  formData.append('file', audioFile);
+  formData.append('audio', audioFile);
+  formData.append('file', audioFile); // dual-field for maximum compatibility
   if (meetingTitleInput.value.trim()) {
     formData.append('title', meetingTitleInput.value.trim());
   }
@@ -355,6 +546,10 @@ processForm.addEventListener('submit', async (e) => {
 
     const data = await res.json();
     if (!res.ok || data.error) {
+      if (data.needLogin) {
+        currentUser = null;
+        loginModal.classList.remove('hidden');
+      }
       throw new Error(data.error || 'Xử lý thất bại');
     }
 
@@ -371,11 +566,20 @@ processForm.addEventListener('submit', async (e) => {
   }
 });
 
-// Load Meetings List
+// =========================================================================
+// 5. Load & Render Meetings List
+// =========================================================================
+
 async function loadMeetings() {
+  if (!currentUser) return;
   try {
     const res = await fetch('/api/meetings');
     const data = await res.json();
+    if (res.status === 401 && data.needLogin) {
+      currentUser = null;
+      loginModal.classList.remove('hidden');
+      return;
+    }
     allMeetings = data.meetings || [];
     renderMeetingsList(allMeetings);
   } catch (err) {
@@ -408,15 +612,20 @@ function renderMeetingsList(meetings) {
       minute: '2-digit',
     });
 
+    const odooBadge = m.odooProjectUrl
+      ? `<span class="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold text-[9px] border border-purple-200">ODOO ✓</span>`
+      : '';
+
     item.innerHTML = `
       <div class="flex items-start justify-between gap-1">
         <h4 class="font-semibold text-xs text-slate-800 line-clamp-1">${escapeHtml(m.title)}</h4>
         <span class="text-[10px] text-slate-400 shrink-0">${date}</span>
       </div>
       <p class="text-[11px] text-slate-500 mt-1 line-clamp-2">${escapeHtml(m.executiveSummaryPreview || '')}</p>
-      <div class="flex items-center space-x-2 mt-2 text-[10px]">
+      <div class="flex items-center space-x-1.5 mt-2 text-[10px]">
         <span class="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium">${m.actionItemsCount} tasks</span>
         <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${m.decisionsCount} quyết định</span>
+        ${odooBadge}
       </div>
     `;
 
@@ -441,7 +650,10 @@ searchInput.addEventListener('input', (e) => {
   renderMeetingsList(filtered);
 });
 
-// View Meeting Detail
+// =========================================================================
+// 6. View Meeting Detail & Render Sections
+// =========================================================================
+
 async function viewMeeting(id) {
   closeDrawer();
   currentMeetingId = id;
@@ -450,9 +662,10 @@ async function viewMeeting(id) {
   try {
     const res = await fetch(`/api/meetings/${id}`);
     const data = await res.json();
-    if (!res.ok || !data.meeting) throw new Error('Không tìm thấy cuộc họp');
+    if (!res.ok || !data.meeting) throw new Error(data.error || 'Không tìm thấy cuộc họp');
 
     const m = data.meeting;
+    currentMeetingData = m;
     const r = m.recap;
 
     detailTitle.textContent = r.title || m.title;
@@ -465,6 +678,17 @@ async function viewMeeting(id) {
     });
     detailLanguageBadge.textContent = (r.language || 'VI').toUpperCase();
     detailDuration.textContent = r.durationEstimate ? `• ${r.durationEstimate}` : '';
+
+    // Render Odoo Linked Banner
+    if (m.odooProject) {
+      odooProjectBanner.classList.remove('hidden');
+      odooBannerTitle.textContent = `Đã liên kết Dự án Odoo #${m.odooProject.projectId}: ${m.odooProject.projectName}`;
+      const dateStr = new Date(m.odooProject.pushedAt).toLocaleString('vi-VN');
+      odooBannerMeta.textContent = `Khởi tạo bởi ${m.odooProject.pushedBy} lúc ${dateStr} • ${m.odooProject.tasksCount} tasks`;
+      odooBannerLink.href = m.odooProject.projectUrl;
+    } else {
+      odooProjectBanner.classList.add('hidden');
+    }
 
     // Audio player
     if (m.audioFileName) {
@@ -659,6 +883,7 @@ function renderActionItems(meeting) {
         });
         const d = await res.json();
         if (res.ok && d.meeting) {
+          currentMeetingData = d.meeting;
           renderActionItems(d.meeting);
           showToast('Đã cập nhật trạng thái nhiệm vụ!');
         }
@@ -671,10 +896,159 @@ function renderActionItems(meeting) {
   });
 }
 
-// Actions in detail view
+// =========================================================================
+// 7. Human Review & Push to Odoo Modal Logic
+// =========================================================================
+
+function openOdooReviewModal() {
+  if (!currentMeetingData) return;
+
+  const m = currentMeetingData;
+  const items = m.recap.actionItems || [];
+
+  if (items.length === 0) {
+    showToast('Cuộc họp này không có Action Items nào để tạo dự án Odoo!', true);
+    return;
+  }
+
+  odooProjectNameInput.value = (m.recap.title || m.title || 'Dự án từ Cuộc họp').trim();
+  odooProfileSelect.value = currentUser?.profile || 'skillbon';
+  odooModalTaskCountBadge.textContent = `${items.length} tasks`;
+
+  // Render tasks preview list
+  odooTasksPreviewList.innerHTML = '';
+  items.forEach((item, idx) => {
+    const taskRow = document.createElement('div');
+    taskRow.className = 'py-2 flex items-start justify-between gap-2';
+    taskRow.innerHTML = `
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center space-x-1.5">
+          <span class="font-mono text-[10px] font-bold text-purple-700 bg-purple-50 px-1 rounded">TSK-${String(idx + 1).padStart(2, '0')}</span>
+          <span class="font-semibold text-slate-800 truncate">${escapeHtml(item.task)}</span>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-0.5 flex items-center space-x-2">
+          <span>Người làm: <strong class="text-slate-600">${escapeHtml(item.assignee || 'Chưa chỉ định')}</strong></span>
+          <span>• Hạn: <strong class="text-slate-600">${escapeHtml(item.dueDate || 'Hôm nay')}</strong></span>
+        </div>
+      </div>
+      <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${
+        item.priority === 'high' ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-600'
+      }">${(item.priority || 'MED').toUpperCase()}</span>
+    `;
+    odooTasksPreviewList.appendChild(taskRow);
+  });
+
+  // Reset disclaimer and button
+  chkOdooDisclaimer.checked = false;
+  btnConfirmPushOdoo.disabled = true;
+
+  // Views
+  odooModalNormalView.classList.remove('hidden');
+  odooModalLoadingView.classList.add('hidden');
+  odooModalSuccessView.classList.add('hidden');
+
+  odooModal.classList.remove('hidden');
+  if (window.lucide) lucide.createIcons();
+}
+
+if (btnOpenOdooModal) {
+  btnOpenOdooModal.addEventListener('click', openOdooReviewModal);
+}
+
+if (btnCloseOdooModal) {
+  btnCloseOdooModal.addEventListener('click', () => odooModal.classList.add('hidden'));
+}
+if (btnCancelOdooModal) {
+  btnCancelOdooModal.addEventListener('click', () => odooModal.classList.add('hidden'));
+}
+if (btnCloseOdooSuccessModal) {
+  btnCloseOdooSuccessModal.addEventListener('click', () => odooModal.classList.add('hidden'));
+}
+
+// Enable push button ONLY when disclaimer checkbox is checked
+if (chkOdooDisclaimer) {
+  chkOdooDisclaimer.addEventListener('change', () => {
+    btnConfirmPushOdoo.disabled = !chkOdooDisclaimer.checked;
+  });
+}
+
+// Download Excel directly from modal
+if (btnModalDownloadExcel) {
+  btnModalDownloadExcel.addEventListener('click', () => {
+    if (!currentMeetingId) return;
+    window.location.href = `/api/meetings/${currentMeetingId}/excel`;
+  });
+}
+
+// Submit Push to Odoo
+if (btnConfirmPushOdoo) {
+  btnConfirmPushOdoo.addEventListener('click', async () => {
+    if (!chkOdooDisclaimer.checked) {
+      showToast('Vui lòng xác nhận điều khoản trách nhiệm!', true);
+      return;
+    }
+
+    if (!currentMeetingId) return;
+
+    // Switch to loading
+    odooModalNormalView.classList.add('hidden');
+    odooModalLoadingView.classList.remove('hidden');
+
+    try {
+      const res = await fetch(`/api/meetings/${currentMeetingId}/push-odoo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          disclaimerAccepted: true,
+          profileName: odooProfileSelect.value,
+          projectName: odooProjectNameInput.value.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Khởi tạo dự án Odoo thất bại.');
+      }
+
+      const proj = data.project;
+      if (currentMeetingData) {
+        currentMeetingData.odooProject = proj;
+      }
+
+      // Show success view
+      odooModalLoadingView.classList.add('hidden');
+      odooModalSuccessView.classList.remove('hidden');
+
+      odooSuccessProjectName.textContent = `Tên dự án: ${proj.projectName} (#${proj.projectId})`;
+      odooSuccessMeta.textContent = `Đã tạo ${proj.tasksCount} tasks trên Odoo (${proj.profileName}) đứng tên ${currentUser.name}.`;
+      odooSuccessLink.href = proj.projectUrl;
+
+      // Update detail banner
+      odooProjectBanner.classList.remove('hidden');
+      odooBannerTitle.textContent = `Đã liên kết Dự án Odoo #${proj.projectId}: ${proj.projectName}`;
+      odooBannerMeta.textContent = `Khởi tạo bởi ${proj.pushedBy} • ${proj.tasksCount} tasks`;
+      odooBannerLink.href = proj.projectUrl;
+
+      showToast('🎉 Khởi tạo dự án Odoo thành công!');
+      await loadMeetings();
+      if (window.lucide) lucide.createIcons();
+    } catch (err) {
+      console.error('Push Odoo failed:', err);
+      odooModalLoadingView.classList.add('hidden');
+      odooModalNormalView.classList.remove('hidden');
+      showToast(err.message, true);
+    }
+  });
+}
+
+// =========================================================================
+// 8. General Actions
+// =========================================================================
+
 btnNewRecap.addEventListener('click', () => {
   closeDrawer();
   currentMeetingId = null;
+  currentMeetingData = null;
   detailSection.classList.add('hidden');
   uploadSection.classList.remove('hidden');
   renderMeetingsList(allMeetings);
@@ -720,6 +1094,7 @@ btnDeleteMeeting.addEventListener('click', async () => {
     if (res.ok) {
       showToast('Đã xóa cuộc họp.');
       currentMeetingId = null;
+      currentMeetingData = null;
       detailSection.classList.add('hidden');
       uploadSection.classList.remove('hidden');
       await loadMeetings();
@@ -740,7 +1115,6 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
-// Initial Boot
-checkConfig();
-loadMeetings();
+// Initial Boot: Check Auth -> Load Data
+checkAuth();
 if (window.lucide) lucide.createIcons();

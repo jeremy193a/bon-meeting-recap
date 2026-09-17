@@ -3,7 +3,7 @@ import type { MeetingRecord } from '../types.js';
 
 /**
  * Generates a professionally formatted Excel workbook (.xlsx)
- * designed for task management and ready for Odoo Task import.
+ * 100% compliant with the Odoo WBS Project Engine parser.
  */
 export async function generateMeetingExcel(record: MeetingRecord): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
@@ -11,40 +11,47 @@ export async function generateMeetingExcel(record: MeetingRecord): Promise<Buffe
   workbook.created = new Date();
 
   const { title, createdAt, recap } = record;
-  const meetingDateStr = new Date(createdAt).toLocaleDateString('vi-VN', {
+  const meetingDate = new Date(createdAt);
+  const meetingDateIso = meetingDate.toISOString().split('T')[0];
+  const meetingDateStr = meetingDate.toLocaleDateString('vi-VN', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
   });
 
   // =========================================================================
-  // Sheet 1: Action Items (Ready for Odoo Task import)
+  // Sheet 1: Quản lý dự án (WBS Format for Odoo Project Engine)
   // =========================================================================
-  const taskSheet = workbook.addWorksheet('Action Items (Tasks)', {
+  const taskSheet = workbook.addWorksheet('Quản lý dự án', {
     views: [{ state: 'frozen', ySplit: 1 }],
   });
 
   taskSheet.columns = [
-    { header: 'Mã Task', key: 'id', width: 12 },
-    { header: 'Tên Công Việc (Task Name)', key: 'name', width: 36 },
-    { header: 'Người Phụ Trách (Assignee)', key: 'assignee', width: 22 },
-    { header: 'Hạn Hoàn Thành (Deadline)', key: 'deadline', width: 18 },
-    { header: 'Độ Ưu Tiên (Priority)', key: 'priority', width: 16 },
-    { header: 'Trạng Thái (Status)', key: 'status', width: 14 },
-    { header: 'Mô Tả Chi Tiết (Description)', key: 'description', width: 45 },
-    { header: 'Cuộc Họp Nguồn (Source Meeting)', key: 'meeting', width: 28 },
-    { header: 'Ngày Tạo (Date)', key: 'date', width: 14 },
+    { header: 'ID', key: 'id', width: 12 },
+    { header: 'Hạng mục', key: 'category', width: 22 },
+    { header: 'Backlog / Công việc', key: 'name', width: 38 },
+    { header: 'Ưu tiên', key: 'priority', width: 14 },
+    { header: 'Owner', key: 'owner', width: 22 },
+    { header: 'Kỹ năng / Kiến thức', key: 'skills', width: 24 },
+    { header: 'Bắt đầu', key: 'start', width: 15 },
+    { header: 'Deadline', key: 'deadline', width: 15 },
+    { header: 'Trạng thái', key: 'status', width: 16 },
+    { header: '% HT', key: 'progress', width: 10 },
+    { header: 'Definition of Done (DoD)', key: 'dod', width: 35 },
+    { header: 'Điều kiện đầu vào / Gate', key: 'gate', width: 28 },
+    { header: 'Phụ thuộc', key: 'dep', width: 14 },
+    { header: 'Ghi chú', key: 'note', width: 36 },
   ];
 
   // Style header row
   const headerRow = taskSheet.getRow(1);
-  headerRow.height = 28;
+  headerRow.height = 30;
   headerRow.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     cell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FF1E40AF' }, // Dark Blue #1e40af
+      fgColor: { argb: 'FF1E40AF' }, // Dark Blue #1E40AF
     };
     cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
     cell.border = {
@@ -59,28 +66,39 @@ export async function generateMeetingExcel(record: MeetingRecord): Promise<Buffe
   recap.actionItems.forEach((item, idx) => {
     const priorityText =
       item.priority === 'high'
-        ? 'Cao (High)'
+        ? 'Cao'
         : item.priority === 'low'
-        ? 'Thấp (Low)'
-        : 'Trung bình (Med)';
+        ? 'Thấp'
+        : 'Trung bình';
+
+    const deadlineVal = item.dueDate && /^\d{4}-\d{2}-\d{2}/.test(item.dueDate)
+      ? item.dueDate
+      : meetingDateIso;
 
     const row = taskSheet.addRow({
       id: `TSK-${String(idx + 1).padStart(2, '0')}`,
+      category: item.category || (recap.topics && recap.topics[0]?.title) || 'Hành động Cuộc họp',
       name: item.task,
-      assignee: item.assignee || 'Chưa chỉ định',
-      deadline: item.dueDate || 'Chưa có',
       priority: priorityText,
-      status: item.completed ? 'Đã xong (Done)' : 'Mới (To Do)',
-      description: item.description || item.task,
-      meeting: title || recap.title,
-      date: meetingDateStr,
+      owner: item.assignee || 'Chưa chỉ định',
+      skills: 'Kỹ năng chuyên môn / Nghiệp vụ',
+      start: meetingDateIso,
+      deadline: deadlineVal,
+      status: item.completed ? 'Hoàn thành' : 'Đang thực hiện',
+      progress: item.completed ? '1' : '0',
+      dod: item.dod || item.description || item.task,
+      gate: item.gate || 'Thống nhất trong biên bản cuộc họp',
+      dep: item.dependencies || '-',
+      note: item.description
+        ? `${item.description} (Nguồn: ${title || recap.title})`
+        : `Nguồn: ${title || recap.title} — Ngày ${meetingDateStr}`,
     });
 
-    row.height = 24;
+    row.height = 26;
     row.eachCell((cell, colNumber) => {
       cell.alignment = {
         vertical: 'middle',
-        horizontal: colNumber === 1 || colNumber === 4 || colNumber === 5 || colNumber === 6 ? 'center' : 'left',
+        horizontal: [1, 4, 7, 8, 9, 10, 13].includes(colNumber) ? 'center' : 'left',
         wrapText: true,
       };
       cell.border = {
@@ -91,7 +109,7 @@ export async function generateMeetingExcel(record: MeetingRecord): Promise<Buffe
       };
 
       // Highlight High priority in soft red
-      if (colNumber === 5 && item.priority === 'high') {
+      if (colNumber === 4 && item.priority === 'high') {
         cell.font = { color: { argb: 'FFB91C1C' }, bold: true };
       }
     });
@@ -103,11 +121,11 @@ export async function generateMeetingExcel(record: MeetingRecord): Promise<Buffe
   const summarySheet = workbook.addWorksheet('Tổng Quan & Quyết Định');
   summarySheet.columns = [
     { header: 'Hạng Mục', key: 'category', width: 25 },
-    { header: 'Nội Dung Chi Tiết', key: 'content', width: 70 },
+    { header: 'Nội Dung Chi Tiết', key: 'content', width: 75 },
   ];
 
   const sumHeader = summarySheet.getRow(1);
-  sumHeader.height = 26;
+  sumHeader.height = 28;
   sumHeader.eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
     cell.fill = {
@@ -118,65 +136,43 @@ export async function generateMeetingExcel(record: MeetingRecord): Promise<Buffe
     cell.alignment = { vertical: 'middle', horizontal: 'center' };
   });
 
-  summarySheet.addRow({
-    category: 'Tiêu Đề Cuộc Họp',
-    content: recap.title || title,
-  });
-  summarySheet.addRow({
-    category: 'Thời Gian',
-    content: meetingDateStr,
-  });
-  if (recap.attendees && recap.attendees.length > 0) {
-    summarySheet.addRow({
-      category: 'Người Tham Dự',
-      content: recap.attendees.join(', '),
+  const addSumRow = (cat: string, content: string) => {
+    const r = summarySheet.addRow({ category: cat, content });
+    r.height = 24;
+    r.eachCell((cell, col) => {
+      cell.alignment = { vertical: 'middle', horizontal: col === 1 ? 'center' : 'left', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      };
+      if (col === 1) cell.font = { bold: true, color: { argb: 'FF1E293B' } };
     });
+  };
+
+  addSumRow('Tên Cuộc Họp', title || recap.title);
+  addSumRow('Ngày Diễn Ra', meetingDateStr);
+  if (recap.attendees?.length) {
+    addSumRow('Thành Phần Tham Dự', recap.attendees.join(', '));
   }
-  summarySheet.addRow({
-    category: 'Tóm Tắt Tổng Quan',
-    content: recap.executiveSummary,
-  });
+  if (recap.meetingGoal) {
+    addSumRow('Mục Tiêu Cuộc Họp', `${recap.meetingGoal} ${recap.goalAchievementStatus ? `[${recap.goalAchievementStatus}]` : ''}`);
+  }
+  addSumRow('Tóm Tắt Điều Hành', recap.executiveSummary);
 
   if (recap.decisions.length > 0) {
-    summarySheet.addRow({
-      category: 'Quyết Định Then Chốt',
-      content: recap.decisions.map((d, i) => `${i + 1}. ${d}`).join('\n'),
-    });
-  }
-
-  if (recap.openQuestions && recap.openQuestions.length > 0) {
-    summarySheet.addRow({
-      category: 'Vấn Đề Chưa Chốt (Open Questions)',
-      content: recap.openQuestions
-        .map((q, i) => `${i + 1}. ${q.question}${q.owner ? ` (Chờ: ${q.owner})` : ''}`)
-        .join('\n'),
-    });
+    addSumRow('Quyết Định Cốt Lõi', recap.decisions.map((d, i) => `${i + 1}. ${d}`).join('\n'));
   }
 
   if (recap.risks && recap.risks.length > 0) {
-    summarySheet.addRow({
-      category: 'Cảnh Báo Rủi Ro (Risks)',
-      content: recap.risks.map((r, i) => `${i + 1}. ${r}`).join('\n'),
-    });
+    addSumRow('Rủi Ro Tiềm Ẩn', recap.risks.map((r, i) => `${i + 1}. ${r}`).join('\n'));
   }
 
-  // Format summary rows
-  summarySheet.eachRow((row, rowNumber) => {
-    if (rowNumber > 1) {
-      row.height = Math.max(26, String(row.getCell(2).value).split('\n').length * 18);
-      row.eachCell((cell) => {
-        cell.alignment = { vertical: 'top', wrapText: true };
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-          right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        };
-      });
-      row.getCell(1).font = { bold: true, color: { argb: 'FF1E293B' } };
-    }
-  });
+  if (recap.openQuestions && recap.openQuestions.length > 0) {
+    addSumRow('Vấn Đề Cần Làm Rõ', recap.openQuestions.map((q, i) => `${i + 1}. ${q.question} ${q.owner ? `(${q.owner})` : ''}`).join('\n'));
+  }
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
+  const uint8Array = await workbook.xlsx.writeBuffer();
+  return Buffer.from(uint8Array);
 }
