@@ -9,30 +9,32 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
     timeZone: 'Asia/Ho_Chi_Minh',
   });
 
+  const isEn = Boolean(recap.language && recap.language.toLowerCase().startsWith('en'));
+
   const lines: string[] = [];
 
   lines.push(`# ${recap.title || title}`);
-  lines.push(`> **Thời gian tạo:** ${dateStr} | **Ngôn ngữ:** ${recap.language}`);
+  lines.push(`> **${isEn ? 'Created At' : 'Thời gian tạo'}:** ${dateStr} | **${isEn ? 'Language' : 'Ngôn ngữ'}:** ${recap.language}`);
   if (recap.durationEstimate) {
-    lines.push(`> **Thời lượng ước tính:** ${recap.durationEstimate}`);
+    lines.push(`> **${isEn ? 'Estimated Duration' : 'Thời lượng ước tính'}:** ${recap.durationEstimate}`);
   }
   if (recap.attendees && recap.attendees.length > 0) {
-    lines.push(`> **Người tham dự:** ${recap.attendees.join(', ')}`);
+    lines.push(`> **${isEn ? 'Attendees' : 'Người tham dự'}:** ${recap.attendees.join(', ')}`);
   }
   if (recap.meetingGoal) {
-    lines.push(`> **Mục tiêu cuộc họp:** ${recap.meetingGoal} (${recap.goalAchievementStatus || 'N/A'})`);
+    lines.push(`> **${isEn ? 'Meeting Goal' : 'Mục tiêu cuộc họp'}:** ${recap.meetingGoal} (${recap.goalAchievementStatus || 'N/A'})`);
   }
   lines.push('');
 
   // Executive summary
-  lines.push('## 📌 Tóm Tắt Tổng Quan (Executive Summary)');
+  lines.push(isEn ? '## 📌 Executive Summary' : '## 📌 Tóm Tắt Tổng Quan (Executive Summary)');
   lines.push(recap.executiveSummary.trim());
   lines.push('');
 
   // Key decisions
-  lines.push('## ⚖️ Quyết Định Then Chốt (Key Decisions)');
+  lines.push(isEn ? '## ⚖️ Key Decisions' : '## ⚖️ Quyết Định Then Chốt (Key Decisions)');
   if (recap.decisions.length === 0) {
-    lines.push('_Không có quyết định nào được ghi nhận cụ thể._');
+    lines.push(isEn ? '_No specific decisions recorded._' : '_Không có quyết định nào được ghi nhận cụ thể._');
   } else {
     for (const decision of recap.decisions) {
       lines.push(`- ${decision}`);
@@ -41,18 +43,18 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
   lines.push('');
 
   // Action items
-  lines.push('## ✅ Nhiệm Vụ & Phân Công (Action Items - Odoo Ready)');
+  lines.push(isEn ? '## ✅ Action Items & Tasks' : '## ✅ Nhiệm Vụ & Phân Công (Action Items - Odoo Ready)');
   if (recap.actionItems.length === 0) {
-    lines.push('_Không có action item cụ thể._');
+    lines.push(isEn ? '_No specific action items recorded._' : '_Không có action item cụ thể._');
   } else {
     for (const item of recap.actionItems) {
-      const assigneeStr = item.assignee ? ` [Phụ trách: **${item.assignee}**]` : '';
-      const dueStr = item.dueDate ? ` (Hạn: ${item.dueDate})` : '';
+      const assigneeStr = item.assignee ? ` [${isEn ? 'Assignee' : 'Phụ trách'}: **${item.assignee}**]` : '';
+      const dueStr = item.dueDate ? ` (${isEn ? 'Due' : 'Hạn'}: ${item.dueDate})` : '';
       const priorityStr = item.priority === 'high' ? ' 🚨 [HIGH]' : item.priority === 'low' ? ' 🟢 [LOW]' : '';
       const checkbox = item.completed ? '[x]' : '[ ]';
       lines.push(`- ${checkbox} **${item.task}**${assigneeStr}${dueStr}${priorityStr}`);
       if (item.description && item.description !== item.task) {
-        lines.push(`  > *Mô tả:* ${item.description}`);
+        lines.push(`  > *${isEn ? 'Description' : 'Mô tả'}:* ${item.description}`);
       }
     }
   }
@@ -60,9 +62,9 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
 
   // Open Questions & Blockers
   if (recap.openQuestions && recap.openQuestions.length > 0) {
-    lines.push('## ❓ Vấn Đề Chưa Chốt (Open Questions)');
+    lines.push(isEn ? '## ❓ Open Questions' : '## ❓ Vấn Đề Chưa Chốt (Open Questions)');
     for (const q of recap.openQuestions) {
-      const ownerStr = q.owner ? ` *(Chờ phản hồi từ: **${q.owner}**)*` : '';
+      const ownerStr = q.owner ? ` *(${isEn ? 'Pending response from' : 'Chờ phản hồi từ'}: **${q.owner}**)*` : '';
       lines.push(`- ⚠️ ${q.question}${ownerStr}`);
     }
     lines.push('');
@@ -70,7 +72,7 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
 
   // Risks
   if (recap.risks && recap.risks.length > 0) {
-    lines.push('## ⚠️ Cảnh Báo Rủi Ro (Risks & Blockers)');
+    lines.push(isEn ? '## ⚠️ Risks & Blockers' : '## ⚠️ Cảnh Báo Rủi Ro (Risks & Blockers)');
     for (const risk of recap.risks) {
       lines.push(`- 🛑 ${risk}`);
     }
@@ -79,7 +81,7 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
 
   // Topics breakdown
   if (recap.topics.length > 0) {
-    lines.push('## 🔍 Chi Tiết Nội Dung (Topics Breakdown)');
+    lines.push(isEn ? '## 🔍 Discussion Topics Breakdown' : '## 🔍 Chi Tiết Nội Dung (Topics Breakdown)');
     for (const topic of recap.topics) {
       lines.push(`### ${topic.title}`);
       lines.push(topic.summary);
@@ -95,7 +97,7 @@ export function formatMeetingToMarkdown(record: MeetingRecord): string {
 
   // Transcript if present
   if (recap.transcript && recap.transcript.length > 0) {
-    lines.push('## 📝 Lược Sử Cuộc Họp (Transcript)');
+    lines.push(isEn ? '## 📝 Meeting Transcript' : '## 📝 Lược Sử Cuộc Họp (Transcript)');
     for (const seg of recap.transcript) {
       const timeTag = seg.timestamp ? `\`${seg.timestamp}\`` : '';
       const speakerTag = seg.speaker ? `**${seg.speaker}**` : '';

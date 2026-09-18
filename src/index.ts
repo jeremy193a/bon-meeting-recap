@@ -375,6 +375,16 @@ app.post('/api/meetings/process', async (c) => {
 
     const attendeesRaw = typeof body['attendees'] === 'string' ? body['attendees'].trim() : '';
     const meetingGoal = typeof body['meetingGoal'] === 'string' ? body['meetingGoal'].trim() : '';
+    const rawLang = typeof body['languagePreference'] === 'string'
+      ? body['languagePreference'].trim()
+      : typeof body['language'] === 'string'
+      ? body['language'].trim()
+      : 'auto';
+    const languagePreference = (['auto', 'en', 'vi', 'bilingual'].includes(rawLang) ? rawLang : 'auto') as
+      | 'auto'
+      | 'en'
+      | 'vi'
+      | 'bilingual';
 
     if (!file || !(file instanceof File)) {
       return c.json({ error: 'No audio file provided or invalid file format' }, 400);
@@ -414,7 +424,7 @@ app.post('/api/meetings/process', async (c) => {
       mimeType = mimeMap[ext] ?? 'audio/webm';
     }
 
-    console.log(`[API] Processing audio file for user ${session.name} (${session.uid}): ${file.name} (${mimeType}, size: ${file.size} bytes)`);
+    console.log(`[API] Processing audio file for user ${session.name} (${session.uid}): ${file.name} (${mimeType}, size: ${file.size} bytes, language: ${languagePreference})`);
 
     // AGY directly analyzes the saved local audio and creates a recap.
     const recapData = await processAudioToRecap({
@@ -424,6 +434,7 @@ app.post('/api/meetings/process', async (c) => {
       customPrompt: customPrompt || undefined,
       attendees: attendeesRaw || undefined,
       meetingGoal: meetingGoal || undefined,
+      languagePreference,
     });
 
     const record: MeetingRecord = {

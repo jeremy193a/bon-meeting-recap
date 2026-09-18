@@ -20,9 +20,75 @@ import type { MeetingRecord } from '../types.js';
  */
 export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer> {
   const { title, createdAt, recap } = record;
-  const meetingDateStr = new Date(createdAt).toLocaleString('vi-VN', {
+  const isEn = Boolean(recap.language && recap.language.toLowerCase().startsWith('en'));
+
+  const meetingDateStr = new Date(createdAt).toLocaleString(isEn ? 'en-US' : 'vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
   });
+
+  const i18n = isEn
+    ? {
+        defaultTitle: 'Meeting Minutes & Executive Summary',
+        timeLabel: '📅 Date & Time: ',
+        langLabel: '   |   🗣️ Language: ',
+        durationLabel: '   |   ⏱️ Duration: ',
+        attendeesLabel: '👥 Attendees: ',
+        goalLabel: '🎯 Meeting Goal: ',
+        statusLabel: 'Status: ',
+        sec1Title: '1. Executive Summary',
+        sec2Title: '2. Key Decisions',
+        noDecisions: 'No key decisions specifically recorded.',
+        sec3Title: '3. Action Items & Next Commitments (Odoo Ready)',
+        noActions: 'No action items specifically recorded.',
+        thCode: 'Task ID',
+        thTask: 'Task / Deliverable',
+        thOwner: 'Assignee',
+        thDeadline: 'Deadline',
+        thPriority: 'Priority',
+        thStatus: 'Status',
+        unassigned: 'Unassigned',
+        priorityHigh: 'High',
+        priorityMedium: 'Medium',
+        priorityLow: 'Low',
+        statusDone: 'Completed',
+        statusPending: 'Pending',
+        sec4Title: '4. Open Questions (Pending Clarification)',
+        waitingOn: 'Waiting on: ',
+        sec5Title: '5. Identified Risks & Blockers',
+        sec6Title: '6. Detailed Discussion Topics',
+        sec7Title: '7. Key Meeting Transcript & Highlights',
+      }
+    : {
+        defaultTitle: 'Biên Bản Cuộc Họp',
+        timeLabel: '📅 Thời gian: ',
+        langLabel: '   |   🗣️ Ngôn ngữ: ',
+        durationLabel: '   |   ⏱️ Thời lượng: ',
+        attendeesLabel: '👥 Người tham dự: ',
+        goalLabel: '🎯 Mục tiêu cuộc họp: ',
+        statusLabel: 'Trạng thái: ',
+        sec1Title: '1. Tóm Tắt Tổng Quan (Executive Summary)',
+        sec2Title: '2. Quyết Định Then Chốt (Key Decisions)',
+        noDecisions: 'Không có quyết định nào được ghi nhận cụ thể.',
+        sec3Title: '3. Phân Công Nhiệm Vụ (Action Items — Odoo Ready)',
+        noActions: 'Không có action items nào được ghi nhận.',
+        thCode: 'Mã Task',
+        thTask: 'Tên Công Việc',
+        thOwner: 'Người Làm',
+        thDeadline: 'Hạn Chót',
+        thPriority: 'Ưu Tiên',
+        thStatus: 'Trạng Thái',
+        unassigned: 'Chưa gán',
+        priorityHigh: 'Cao',
+        priorityMedium: 'Trung bình',
+        priorityLow: 'Thấp',
+        statusDone: 'Đã xong',
+        statusPending: 'Chưa xong',
+        sec4Title: '4. Vấn Đề Chưa Chốt (Open Questions)',
+        waitingOn: 'Chờ phản hồi từ: ',
+        sec5Title: '5. Cảnh Báo Rủi Ro (Risks & Blockers)',
+        sec6Title: '6. Chi Tiết Các Chủ Đề (Topics Breakdown)',
+        sec7Title: '7. Lược Sử Cuộc Họp (Transcript Highlights)',
+      };
 
   const children: (Paragraph | Table)[] = [];
 
@@ -34,7 +100,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
       heading: HeadingLevel.TITLE,
       children: [
         new TextRun({
-          text: recap.title || title || 'Biên Bản Cuộc Họp',
+          text: recap.title || title || i18n.defaultTitle,
           bold: true,
           size: 32, // 16pt
           color: '1E40AF', // Blue 800
@@ -48,13 +114,13 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
   const metaParagraphs = [
     new Paragraph({
       children: [
-        new TextRun({ text: '📅 Thời gian: ', bold: true, color: '475569', size: 20 }),
+        new TextRun({ text: i18n.timeLabel, bold: true, color: '475569', size: 20 }),
         new TextRun({ text: meetingDateStr, color: '1E293B', size: 20 }),
-        new TextRun({ text: '   |   🗣️ Ngôn ngữ: ', bold: true, color: '475569', size: 20 }),
-        new TextRun({ text: (recap.language || 'vi').toUpperCase(), color: '1E293B', size: 20 }),
+        new TextRun({ text: i18n.langLabel, bold: true, color: '475569', size: 20 }),
+        new TextRun({ text: (recap.language || (isEn ? 'EN' : 'VI')).toUpperCase(), color: '1E293B', size: 20 }),
         ...(recap.durationEstimate
           ? [
-              new TextRun({ text: '   |   ⏱️ Thời lượng: ', bold: true, color: '475569', size: 20 }),
+              new TextRun({ text: i18n.durationLabel, bold: true, color: '475569', size: 20 }),
               new TextRun({ text: recap.durationEstimate, color: '1E293B', size: 20 }),
             ]
           : []),
@@ -67,7 +133,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
     metaParagraphs.push(
       new Paragraph({
         children: [
-          new TextRun({ text: '👥 Người tham dự: ', bold: true, color: '475569', size: 20 }),
+          new TextRun({ text: i18n.attendeesLabel, bold: true, color: '475569', size: 20 }),
           new TextRun({ text: recap.attendees.join(', '), color: '1E293B', size: 20 }),
         ],
         spacing: { after: 80 },
@@ -79,11 +145,11 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
     metaParagraphs.push(
       new Paragraph({
         children: [
-          new TextRun({ text: '🎯 Mục tiêu cuộc họp: ', bold: true, color: '475569', size: 20 }),
+          new TextRun({ text: i18n.goalLabel, bold: true, color: '475569', size: 20 }),
           new TextRun({ text: recap.meetingGoal, italics: true, color: '1E293B', size: 20 }),
           ...(recap.goalAchievementStatus
             ? [
-                new TextRun({ text: ` [Trạng thái: `, bold: true, size: 20 }),
+                new TextRun({ text: ` [${i18n.statusLabel}`, bold: true, size: 20 }),
                 new TextRun({ text: recap.goalAchievementStatus, bold: true, color: '047857', size: 20 }),
                 new TextRun({ text: `]`, bold: true, size: 20 }),
               ]
@@ -111,7 +177,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
     new Paragraph({
       heading: HeadingLevel.HEADING_1,
       children: [
-        new TextRun({ text: '1. Tóm Tắt Tổng Quan (Executive Summary)', bold: true, size: 24, color: '1E3A8A' }),
+        new TextRun({ text: i18n.sec1Title, bold: true, size: 24, color: '1E3A8A' }),
       ],
       spacing: { before: 200, after: 100 },
     }),
@@ -160,7 +226,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
     new Paragraph({
       heading: HeadingLevel.HEADING_1,
       children: [
-        new TextRun({ text: '2. Quyết Định Then Chốt (Key Decisions)', bold: true, size: 24, color: '1E3A8A' }),
+        new TextRun({ text: i18n.sec2Title, bold: true, size: 24, color: '1E3A8A' }),
       ],
       spacing: { before: 200, after: 100 },
     }),
@@ -169,7 +235,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
   if (recap.decisions.length === 0) {
     children.push(
       new Paragraph({
-        children: [new TextRun({ text: 'Không có quyết định nào được ghi nhận cụ thể.', italics: true, color: '64748B' })],
+        children: [new TextRun({ text: i18n.noDecisions, italics: true, color: '64748B' })],
         spacing: { after: 120 },
       }),
     );
@@ -194,7 +260,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
     new Paragraph({
       heading: HeadingLevel.HEADING_1,
       children: [
-        new TextRun({ text: '3. Phân Công Nhiệm Vụ (Action Items — Odoo Ready)', bold: true, size: 24, color: '1E3A8A' }),
+        new TextRun({ text: i18n.sec3Title, bold: true, size: 24, color: '1E3A8A' }),
       ],
       spacing: { before: 200, after: 100 },
     }),
@@ -203,7 +269,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
   if (recap.actionItems.length === 0) {
     children.push(
       new Paragraph({
-        children: [new TextRun({ text: 'Không có action items nào được ghi nhận.', italics: true, color: '64748B' })],
+        children: [new TextRun({ text: i18n.noActions, italics: true, color: '64748B' })],
         spacing: { after: 120 },
       }),
     );
@@ -212,32 +278,32 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
       tableHeader: true,
       children: [
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: 'Mã Task', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+          children: [new Paragraph({ children: [new TextRun({ text: i18n.thCode, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
           shading: { type: ShadingType.SOLID, color: '1E40AF', fill: '1E40AF' },
           width: { size: 12, type: WidthType.PERCENTAGE },
         }),
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: 'Tên Công Việc', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+          children: [new Paragraph({ children: [new TextRun({ text: i18n.thTask, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
           shading: { type: ShadingType.SOLID, color: '1E40AF', fill: '1E40AF' },
           width: { size: 28, type: WidthType.PERCENTAGE },
         }),
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: 'Người Làm', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+          children: [new Paragraph({ children: [new TextRun({ text: i18n.thOwner, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
           shading: { type: ShadingType.SOLID, color: '1E40AF', fill: '1E40AF' },
           width: { size: 18, type: WidthType.PERCENTAGE },
         }),
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: 'Hạn Chót', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+          children: [new Paragraph({ children: [new TextRun({ text: i18n.thDeadline, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
           shading: { type: ShadingType.SOLID, color: '1E40AF', fill: '1E40AF' },
           width: { size: 14, type: WidthType.PERCENTAGE },
         }),
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: 'Ưu Tiên', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+          children: [new Paragraph({ children: [new TextRun({ text: i18n.thPriority, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
           shading: { type: ShadingType.SOLID, color: '1E40AF', fill: '1E40AF' },
           width: { size: 12, type: WidthType.PERCENTAGE },
         }),
         new TableCell({
-          children: [new Paragraph({ children: [new TextRun({ text: 'Trạng Thái', bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
+          children: [new Paragraph({ children: [new TextRun({ text: i18n.thStatus, bold: true, color: 'FFFFFF' })], alignment: AlignmentType.CENTER })],
           shading: { type: ShadingType.SOLID, color: '1E40AF', fill: '1E40AF' },
           width: { size: 16, type: WidthType.PERCENTAGE },
         }),
@@ -248,8 +314,8 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
 
     recap.actionItems.forEach((item, idx) => {
       const priorityLabel =
-        item.priority === 'high' ? 'Cao' : item.priority === 'low' ? 'Thấp' : 'Trung bình';
-      const statusLabel = item.completed ? 'Đã xong' : 'Chưa xong';
+        item.priority === 'high' ? i18n.priorityHigh : item.priority === 'low' ? i18n.priorityLow : i18n.priorityMedium;
+      const statusLabel = item.completed ? i18n.statusDone : i18n.statusPending;
 
       const taskCellParagraphs = [
         new Paragraph({
@@ -278,7 +344,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
               width: { size: 28, type: WidthType.PERCENTAGE },
             }),
             new TableCell({
-              children: [new Paragraph({ text: item.assignee || 'Chưa gán', alignment: AlignmentType.CENTER })],
+              children: [new Paragraph({ text: item.assignee || i18n.unassigned, alignment: AlignmentType.CENTER })],
               width: { size: 18, type: WidthType.PERCENTAGE },
             }),
             new TableCell({
@@ -327,7 +393,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
         children: [
-          new TextRun({ text: '4. Vấn Đề Chưa Chốt (Open Questions)', bold: true, size: 24, color: 'B45309' }), // Amber 700
+          new TextRun({ text: i18n.sec4Title, bold: true, size: 24, color: 'B45309' }), // Amber 700
         ],
         spacing: { before: 200, after: 100 },
       }),
@@ -341,7 +407,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
             new TextRun({ text: q.question, bold: true, color: '1E293B', size: 20 }),
             ...(q.owner
               ? [
-                  new TextRun({ text: ` (Chờ phản hồi từ: `, italics: true, size: 20 }),
+                  new TextRun({ text: ` (${i18n.waitingOn}`, italics: true, size: 20 }),
                   new TextRun({ text: q.owner, bold: true, color: 'B45309', size: 20 }),
                   new TextRun({ text: `)`, italics: true, size: 20 }),
                 ]
@@ -363,7 +429,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
         children: [
-          new TextRun({ text: '5. Cảnh Báo Rủi Ro (Risks & Blockers)', bold: true, size: 24, color: 'BE123C' }), // Rose 700
+          new TextRun({ text: i18n.sec5Title, bold: true, size: 24, color: 'BE123C' }), // Rose 700
         ],
         spacing: { before: 200, after: 100 },
       }),
@@ -390,7 +456,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
         children: [
-          new TextRun({ text: '6. Chi Tiết Các Chủ Đề (Topics Breakdown)', bold: true, size: 24, color: '1E3A8A' }),
+          new TextRun({ text: i18n.sec6Title, bold: true, size: 24, color: '1E3A8A' }),
         ],
         spacing: { before: 200, after: 100 },
       }),
@@ -435,7 +501,7 @@ export async function generateMeetingWord(record: MeetingRecord): Promise<Buffer
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
         children: [
-          new TextRun({ text: '7. Lược Sử Cuộc Họp (Transcript Highlights)', bold: true, size: 24, color: '1E3A8A' }),
+          new TextRun({ text: i18n.sec7Title, bold: true, size: 24, color: '1E3A8A' }),
         ],
         spacing: { before: 200, after: 100 },
       }),

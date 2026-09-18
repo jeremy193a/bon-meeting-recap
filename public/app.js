@@ -90,6 +90,7 @@ const recordedDurationText = document.getElementById('recordedDurationText');
 const meetingTitleInput = document.getElementById('meetingTitleInput');
 const attendeesInput = document.getElementById('attendeesInput');
 const meetingGoalInput = document.getElementById('meetingGoalInput');
+const languagePreferenceInput = document.getElementById('languagePreferenceInput');
 const btnToggleAdvanced = document.getElementById('btnToggleAdvanced');
 const advancedContent = document.getElementById('advancedContent');
 const advancedArrow = document.getElementById('advancedArrow');
@@ -732,6 +733,9 @@ processForm.addEventListener('submit', async (e) => {
   if (meetingGoalInput && meetingGoalInput.value.trim()) {
     formData.append('meetingGoal', meetingGoalInput.value.trim());
   }
+  if (languagePreferenceInput && languagePreferenceInput.value) {
+    formData.append('languagePreference', languagePreferenceInput.value);
+  }
   if (customPromptInput.value.trim()) {
     formData.append('customPrompt', customPromptInput.value.trim());
   }
@@ -823,6 +827,11 @@ function renderMeetingsList(meetings) {
       ? `<span class="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-bold text-[9px] border border-purple-200">ODOO ✓</span>`
       : '';
 
+    const lang = (m.language || 'VI').toUpperCase();
+    const langBadge = lang.startsWith('EN')
+      ? `<span class="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-semibold text-[9px] border border-indigo-200">EN</span>`
+      : `<span class="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold text-[9px] border border-blue-200">VI</span>`;
+
     item.innerHTML = `
       <div class="flex items-start justify-between gap-1">
         <h4 class="font-semibold text-xs text-slate-800 line-clamp-1">${escapeHtml(m.title)}</h4>
@@ -830,6 +839,7 @@ function renderMeetingsList(meetings) {
       </div>
       <p class="text-[11px] text-slate-500 mt-1 line-clamp-2">${escapeHtml(m.executiveSummaryPreview || '')}</p>
       <div class="flex items-center space-x-1.5 mt-2 text-[10px]">
+        ${langBadge}
         <span class="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium">${m.actionItemsCount} tasks</span>
         <span class="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">${m.decisionsCount} quyết định</span>
         ${odooBadge}
@@ -883,7 +893,13 @@ async function viewMeeting(id) {
       hour: '2-digit',
       minute: '2-digit',
     });
-    detailLanguageBadge.textContent = (r.language || 'VI').toUpperCase();
+    const langUpper = (r.language || 'VI').toUpperCase();
+    detailLanguageBadge.textContent = langUpper;
+    if (langUpper.startsWith('EN')) {
+      detailLanguageBadge.className = 'text-[10px] sm:text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200';
+    } else {
+      detailLanguageBadge.className = 'text-[10px] sm:text-[11px] font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200';
+    }
     detailDuration.textContent = r.durationEstimate ? `• ${r.durationEstimate}` : '';
 
     // Render Odoo Linked Banner
