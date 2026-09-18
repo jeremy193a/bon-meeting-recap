@@ -46,6 +46,12 @@ docker compose logs -f bon-meeting-recap
 
 Bridge không được expose ra Internet; token là bắt buộc. Đổi `AGY_MODEL` thành `gemini-3.8-flash-medium` nếu ưu tiên chất lượng hơn tốc độ.
 
+## CI/CD
+
+- GitHub Actions chạy CI cho mọi push/PR vào `main`: cài dependencies, type-check và build Docker image.
+- Trên Windows deployment host, chạy một lần `start-github-deploy-watcher.bat`. Worker kiểm tra `origin/main` mỗi 60 giây; khi có commit mới, nó hard-reset source đã clone, chạy `docker compose up -d --build` và chờ container healthy.
+- `.env` và `data/` là untracked/ignored nên không bị ghi đè khi deploy.
+
 ## Cloudflare Tunnel
 
 `docker-compose.yml` tham gia mạng external `bonario-shared-tunnel`. Thêm ingress sau vào `../tunnel-master/config/config.yml`:
