@@ -85,13 +85,19 @@ const selectedFileInfo = document.getElementById('selectedFileInfo');
 const selectedFileName = document.getElementById('selectedFileName');
 const selectedFileSize = document.getElementById('selectedFileSize');
 
+let activeMediaStream = null;
+
 const recordContainer = document.getElementById('recordContainer');
 const btnStartRecord = document.getElementById('btnStartRecord');
+const btnStartRecordText = document.getElementById('btnStartRecordText');
 const btnStopRecord = document.getElementById('btnStopRecord');
+const btnCancelRecord = document.getElementById('btnCancelRecord');
 const recordTimer = document.getElementById('recordTimer');
 const recordPing = document.getElementById('recordPing');
 const recordStatusText = document.getElementById('recordStatusText');
+const recordedAudioContainer = document.getElementById('recordedAudioContainer');
 const recordedAudioPreview = document.getElementById('recordedAudioPreview');
+const recordedDurationText = document.getElementById('recordedDurationText');
 
 const meetingTitleInput = document.getElementById('meetingTitleInput');
 const attendeesInput = document.getElementById('attendeesInput');
@@ -345,6 +351,12 @@ btnToggleAdvanced.addEventListener('click', () => {
 // =========================================================================
 
 tabUploadMode.addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    if (!confirm('Bạn đang ghi âm. Bạn có chắc muốn chuyển sang Upload file (bản ghi âm dở dang sẽ bị hủy)?')) {
+      return;
+    }
+    btnCancelRecord.click();
+  }
   tabUploadMode.className = 'flex-1 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm transition-all flex items-center justify-center space-x-1.5';
   tabRecordMode.className = 'flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center justify-center space-x-1.5';
   dropZoneContainer.classList.remove('hidden');
@@ -417,8 +429,10 @@ function formatBytes(bytes) {
 btnStartRecord.addEventListener('click', async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    activeMediaStream = stream;
     recordedChunks = [];
     recordedAudioBlob = null;
+    recordedAudioContainer.classList.add('hidden');
     recordedAudioPreview.classList.add('hidden');
 
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
@@ -430,15 +444,33 @@ btnStartRecord.addEventListener('click', async () => {
     mediaRecorder = new MediaRecorder(stream, { mimeType });
 
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
+      if (e.data && e.data.size > 0) recordedChunks.push(e.data);
     };
 
     mediaRecorder.onstop = () => {
-      recordedAudioBlob = new Blob(recordedChunks, { type: mimeType });
-      recordedAudioPreview.src = URL.createObjectURL(recordedAudioBlob);
-      recordedAudioPreview.classList.remove('hidden');
-      updateSubmitState();
-      stream.getTracks().forEach((track) => track.stop());
+      if (recordedChunks.length > 0) {
+        recordedAudioBlob = new Blob(recordedChunks, { type: mimeType });
+        recordedAudioPreview.src = URL.createObjectURL(recordedAudioBlob);
+        recordedAudioContainer.classList.remove('hidden');
+        recordedAudioPreview.classList.remove('hidden');
+        if (recordedDurationText) {
+          const mins = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+          const secs = String(recordSeconds % 60).padStart(2, '0');
+          recordedDurationText.textContent = `${mins}:${secs}`;
+        }
+        if (!meetingTitleInput.value.trim()) {
+          const now = new Date();
+          const dateStr = now.toLocaleDateString('vi-VN');
+          const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+          meetingTitleInput.value = `Ghi âm cuộc họp - ${dateStr} ${timeStr}`;
+        }
+        updateSubmitState();
+        showToast('✓ Đã lưu bản ghi âm! Bấm "Bắt Đầu Tóm Tắt" bên dưới.');
+      }
+      if (activeMediaStream) {
+        activeMediaStream.getTracks().forEach((track) => track.stop());
+        activeMediaStream = null;
+      }
     };
 
     mediaRecorder.start(1000);
@@ -449,6 +481,9 @@ btnStartRecord.addEventListener('click', async () => {
     recordPing.classList.remove('hidden');
     btnStartRecord.classList.add('hidden');
     btnStopRecord.classList.remove('hidden');
+    btnStopRecord.disabled = false;
+    btnCancelRecord.classList.remove('hidden');
+    btnSubmitRecap.disabled = true;
 
     recordInterval = setInterval(() => {
       recordSeconds++;
@@ -458,19 +493,48 @@ btnStartRecord.addEventListener('click', async () => {
     }, 1000);
   } catch (err) {
     console.error('Microphone error:', err);
-    showToast('Không thể truy cập Microphone! Vui lòng cấp quyền.', true);
+    showToast('Không thể truy cập Microphone! Vui lòng cấp quyền micro trên trình duyệt.', true);
   }
 });
 
 btnStopRecord.addEventListener('click', () => {
+  btnStopRecord.disabled = true;
   if (mediaRecorder && mediaRecorder.state !== 'inactive') {
     mediaRecorder.stop();
   }
   clearInterval(recordInterval);
   recordPing.classList.add('hidden');
-  recordStatusText.textContent = 'Ghi âm hoàn tất! Bạn có thể nghe thử lại.';
+  recordStatusText.textContent = 'Ghi âm hoàn tất! Bạn có thể nghe lại bên dưới trước khi tóm tắt.';
   btnStartRecord.classList.remove('hidden');
+  if (btnStartRecordText) btnStartRecordText.textContent = 'Ghi Âm Lại';
   btnStopRecord.classList.add('hidden');
+  btnCancelRecord.classList.add('hidden');
+  btnStopRecord.disabled = false;
+});
+
+btnCancelRecord.addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.ondataavailable = null;
+    mediaRecorder.onstop = null;
+    mediaRecorder.stop();
+  }
+  if (activeMediaStream) {
+    activeMediaStream.getTracks().forEach((track) => track.stop());
+    activeMediaStream = null;
+  }
+  clearInterval(recordInterval);
+  recordedChunks = [];
+  recordedAudioBlob = null;
+  recordPing.classList.add('hidden');
+  recordTimer.textContent = '00:00';
+  recordStatusText.textContent = 'Đã hủy ghi âm. Sẵn sàng ghi âm mới.';
+  btnStartRecord.classList.remove('hidden');
+  if (btnStartRecordText) btnStartRecordText.textContent = 'Bắt Đầu Ghi Âm';
+  btnStopRecord.classList.add('hidden');
+  btnCancelRecord.classList.add('hidden');
+  recordedAudioContainer.classList.add('hidden');
+  updateSubmitState();
+  showToast('Đã hủy bản ghi âm.');
 });
 
 // =========================================================================
@@ -487,14 +551,21 @@ processForm.addEventListener('submit', async (e) => {
   }
 
   const isUploadMode = !dropZoneContainer.classList.contains('hidden');
+
+  if (!isUploadMode && mediaRecorder && mediaRecorder.state === 'recording') {
+    showToast('Vui lòng bấm "Dừng & Sử Dụng" để hoàn tất ghi âm trước!', true);
+    return;
+  }
+
   let audioFile = null;
 
   if (isUploadMode) {
     audioFile = audioFileInput.files[0];
   } else if (recordedAudioBlob) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    audioFile = new File([recordedAudioBlob], `meeting-record-${timestamp}.webm`, {
-      type: 'audio/webm',
+    const ext = (recordedAudioBlob.type && recordedAudioBlob.type.includes('mp4')) ? 'm4a' : 'webm';
+    audioFile = new File([recordedAudioBlob], `meeting-record-${timestamp}.${ext}`, {
+      type: recordedAudioBlob.type || 'audio/webm',
     });
   }
 

@@ -164,17 +164,30 @@
               <div id="recordTimer" class="text-2xl font-mono font-bold text-slate-800">00:00</div>
               <p id="recordStatusText" class="text-xs text-slate-400 mt-1">Sẵn sàng ghi âm từ Microphone điện thoại / máy tính</p>
             </div>
-            <div class="flex items-center justify-center space-x-3">
-              <button id="btnStartRecord" type="button" class="px-4 py-2.5 bg-red-600 active:bg-red-700 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-all shadow-sm shadow-red-500/20 min-h-[42px]">
+            <div class="flex items-center justify-center gap-3">
+              <button id="btnStartRecord" type="button" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-semibold rounded-xl flex items-center space-x-2 transition-all shadow-sm shadow-red-500/20 min-h-[42px] cursor-pointer">
                 <i data-lucide="disc" class="w-4 h-4"></i>
-                <span>Bắt Đầu Ghi Âm</span>
+                <span id="btnStartRecordText">Bắt Đầu Ghi Âm</span>
               </button>
-              <button id="btnStopRecord" type="button" disabled class="px-4 py-2.5 bg-slate-100 text-slate-400 text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition-all disabled:opacity-50 min-h-[42px]">
-                <i data-lucide="square" class="w-4 h-4"></i>
+              <button id="btnStopRecord" type="button" class="hidden px-5 py-2.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-semibold rounded-xl flex items-center space-x-2 transition-all shadow-lg shadow-red-500/30 min-h-[42px] cursor-pointer">
+                <span class="w-3.5 h-3.5 bg-white rounded-xs inline-block"></span>
                 <span>Dừng & Sử Dụng</span>
               </button>
+              <button id="btnCancelRecord" type="button" class="hidden px-4 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-600 text-xs font-medium rounded-xl flex items-center space-x-1.5 transition-all min-h-[42px] cursor-pointer">
+                <i data-lucide="x" class="w-4 h-4"></i>
+                <span>Hủy</span>
+              </button>
             </div>
-            <audio id="recordedAudioPreview" controls class="hidden w-full max-w-md mx-auto mt-4"></audio>
+            <div id="recordedAudioContainer" class="hidden w-full max-w-md mx-auto mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div class="flex items-center justify-between text-xs text-slate-600 font-medium px-1">
+                <span class="flex items-center space-x-1 text-emerald-600 font-semibold">
+                  <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                  <span>Đã ghi âm xong</span>
+                </span>
+                <span id="recordedDurationText" class="text-slate-400 text-[11px]">00:00</span>
+              </div>
+              <audio id="recordedAudioPreview" controls class="w-full h-10"></audio>
+            </div>
           </div>
 
           <!-- Meeting Title, Attendees, and Goal -->
