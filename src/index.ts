@@ -546,6 +546,16 @@ app.delete('/api/meetings/:id', async (c) => {
 // Static Files & Web Interface
 // -------------------------------------------------------------
 
+app.use('/*', async (c, next) => {
+  await next();
+  const p = c.req.path;
+  if (p === '/' || p.startsWith('/public') || p.endsWith('.html') || p.endsWith('.js')) {
+    c.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    c.header('Pragma', 'no-cache');
+    c.header('Expires', '0');
+  }
+});
+
 app.use('/public/*', serveStatic({ root: './' }));
 app.use('/*', serveStatic({ root: './public', index: 'index.html' }));
 

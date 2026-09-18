@@ -109,7 +109,16 @@ const customPromptInput = document.getElementById('customPromptInput');
 
 const processForm = document.getElementById('processForm');
 const btnSubmitRecap = document.getElementById('btnSubmitRecap');
+const btnSubmitRecapText = document.getElementById('btnSubmitRecapText');
+const btnSubmitRecapIcon = document.getElementById('btnSubmitRecapIcon');
 const processingCard = document.getElementById('processingCard');
+
+const draftRecoveryBanner = document.getElementById('draftRecoveryBanner');
+const draftRecoveryTime = document.getElementById('draftRecoveryTime');
+const btnRestoreDraft = document.getElementById('btnRestoreDraft');
+const btnDiscardDraft = document.getElementById('btnDiscardDraft');
+
+let isCurrentlySubmitting = false;
 
 // Detail elements
 const detailTitle = document.getElementById('detailTitle');
@@ -374,11 +383,40 @@ tabRecordMode.addEventListener('click', () => {
 
 function updateSubmitState() {
   const isUploadMode = !dropZoneContainer.classList.contains('hidden');
+  const isRecording = Boolean(mediaRecorder && mediaRecorder.state === 'recording');
+
+  if (!btnSubmitRecap || !btnSubmitRecapText) return;
+
   if (isUploadMode) {
-    btnSubmitRecap.disabled = !audioFileInput.files || audioFileInput.files.length === 0;
+    const hasFile = Boolean(audioFileInput.files && audioFileInput.files.length > 0);
+    btnSubmitRecap.disabled = false;
+    btnSubmitRecap.className = hasFile
+      ? 'w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-2 min-h-[46px] cursor-pointer'
+      : 'w-full py-3.5 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-600 font-medium text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center space-x-2 min-h-[46px] cursor-pointer';
+    btnSubmitRecapText.textContent = hasFile
+      ? 'Bắt Đầu Tóm Tắt (AI Gemini)'
+      : 'Vui Lòng Chọn File Âm Thanh Trước';
+    if (btnSubmitRecapIcon) btnSubmitRecapIcon.setAttribute('data-lucide', 'sparkles');
   } else {
-    btnSubmitRecap.disabled = !recordedAudioBlob;
+    // Record mode
+    if (isRecording) {
+      btnSubmitRecap.disabled = false;
+      btnSubmitRecap.className = 'w-full py-3.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-lg shadow-red-500/30 transition-all flex items-center justify-center space-x-2 min-h-[46px] cursor-pointer animate-pulse';
+      btnSubmitRecapText.textContent = `⏹ Dừng Ghi Âm (${recordTimer.textContent}) & Bắt Đầu Tóm Tắt`;
+      if (btnSubmitRecapIcon) btnSubmitRecapIcon.setAttribute('data-lucide', 'square');
+    } else if (recordedAudioBlob) {
+      btnSubmitRecap.disabled = false;
+      btnSubmitRecap.className = 'w-full py-3.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-2 min-h-[46px] cursor-pointer';
+      btnSubmitRecapText.textContent = 'Bắt Đầu Tóm Tắt Cuộc Họp (AI Gemini)';
+      if (btnSubmitRecapIcon) btnSubmitRecapIcon.setAttribute('data-lucide', 'sparkles');
+    } else {
+      btnSubmitRecap.disabled = false;
+      btnSubmitRecap.className = 'w-full py-3.5 bg-slate-200 hover:bg-slate-300 active:bg-slate-400 text-slate-600 font-medium text-xs sm:text-sm rounded-xl transition-all flex items-center justify-center space-x-2 min-h-[46px] cursor-pointer';
+      btnSubmitRecapText.textContent = '🎙️ Bấm Bắt Đầu Ghi Âm Ở Trên';
+      if (btnSubmitRecapIcon) btnSubmitRecapIcon.setAttribute('data-lucide', 'mic');
+    }
   }
+  if (window.lucide) lucide.createIcons();
 }
 
 // File Drag & Drop
@@ -425,6 +463,129 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+// =========================================================================
+// Audio Draft Cache (IndexedDB for F5 / accidental refresh protection)
+// =========================================================================
+
+const DB_NAME = 'BonRecapDB';
+const STORE_NAME = 'drafts';
+
+function openDraftDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE_NAME);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveDraftAudio(blob, durationSec) {
+  try {
+    const db = await openDraftDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put({
+      blob,
+      durationSec,
+      title: meetingTitleInput ? meetingTitleInput.value.trim() : '',
+      timestamp: Date.now(),
+    }, 'active_draft');
+  } catch (e) {
+    console.warn('[DraftDB] Failed to save draft:', e);
+  }
+}
+
+async function getDraftAudio() {
+  try {
+    const db = await openDraftDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get('active_draft');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function clearDraftAudio() {
+  try {
+    const db = await openDraftDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete('active_draft');
+  } catch {}
+}
+
+async function checkAndOfferDraftRecovery() {
+  try {
+    const draft = await getDraftAudio();
+    if (!draft || !draft.blob) return;
+
+    const ageMs = Date.now() - draft.timestamp;
+    // Discard drafts older than 24h
+    if (ageMs > 24 * 60 * 60 * 1000) {
+      clearDraftAudio();
+      return;
+    }
+
+    const minsAgo = Math.max(1, Math.round(ageMs / 60000));
+    if (draftRecoveryTime) {
+      draftRecoveryTime.textContent = `Bản ghi âm dài khoảng ${draft.durationSec || 0}s, tạo cách đây ${minsAgo} phút`;
+    }
+    if (draftRecoveryBanner) {
+      draftRecoveryBanner.classList.remove('hidden');
+    }
+
+    if (btnRestoreDraft) {
+      btnRestoreDraft.onclick = () => {
+        recordedAudioBlob = draft.blob;
+        recordSeconds = draft.durationSec || 0;
+        tabRecordMode.click();
+        recordedAudioPreview.src = URL.createObjectURL(recordedAudioBlob);
+        recordedAudioContainer.classList.remove('hidden');
+        recordedAudioPreview.classList.remove('hidden');
+        if (recordedDurationText) {
+          const mins = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+          const secs = String(recordSeconds % 60).padStart(2, '0');
+          recordedDurationText.textContent = `${mins}:${secs}`;
+        }
+        if (draft.title && meetingTitleInput && !meetingTitleInput.value.trim()) {
+          meetingTitleInput.value = draft.title;
+        }
+        recordStatusText.innerHTML = '<span class="text-emerald-600 font-medium">✓ Đã khôi phục bản ghi âm! Bạn có thể nghe lại bên dưới trước khi tóm tắt.</span>';
+        btnStartRecord.classList.remove('hidden');
+        if (btnStartRecordText) btnStartRecordText.textContent = 'Ghi Âm Lại';
+        if (draftRecoveryBanner) draftRecoveryBanner.classList.add('hidden');
+        updateSubmitState();
+        showToast('✓ Đã khôi phục bản ghi âm thành công!');
+      };
+    }
+
+    if (btnDiscardDraft) {
+      btnDiscardDraft.onclick = () => {
+        clearDraftAudio();
+        if (draftRecoveryBanner) draftRecoveryBanner.classList.add('hidden');
+        showToast('Đã xóa bản ghi âm nháp.');
+      };
+    }
+  } catch (err) {
+    console.warn('[DraftRecovery] Error checking draft:', err);
+  }
+}
+
+// Window BeforeUnload Warning
+window.addEventListener('beforeunload', (e) => {
+  const isRecording = Boolean(mediaRecorder && mediaRecorder.state === 'recording');
+  const hasUnsavedAudio = Boolean(recordedAudioBlob && !isCurrentlySubmitting);
+  if (isRecording || hasUnsavedAudio) {
+    e.preventDefault();
+    e.returnValue = 'Bạn có bản ghi âm chưa hoàn tất. Bạn có chắc muốn tải lại trang không?';
+    return e.returnValue;
+  }
+});
+
 // Audio Recording (In-Browser)
 btnStartRecord.addEventListener('click', async () => {
   try {
@@ -464,6 +625,7 @@ btnStartRecord.addEventListener('click', async () => {
           const timeStr = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
           meetingTitleInput.value = `Ghi âm cuộc họp - ${dateStr} ${timeStr}`;
         }
+        saveDraftAudio(recordedAudioBlob, recordSeconds);
         updateSubmitState();
         showToast('✓ Đã lưu bản ghi âm! Bấm "Bắt Đầu Tóm Tắt" bên dưới.');
       }
@@ -483,13 +645,14 @@ btnStartRecord.addEventListener('click', async () => {
     btnStopRecord.classList.remove('hidden');
     btnStopRecord.disabled = false;
     btnCancelRecord.classList.remove('hidden');
-    btnSubmitRecap.disabled = true;
+    updateSubmitState();
 
     recordInterval = setInterval(() => {
       recordSeconds++;
       const mins = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
       const secs = String(recordSeconds % 60).padStart(2, '0');
       recordTimer.textContent = `${mins}:${secs}`;
+      updateSubmitState();
     }, 1000);
   } catch (err) {
     console.error('Microphone error:', err);
@@ -510,6 +673,7 @@ btnStopRecord.addEventListener('click', () => {
   btnStopRecord.classList.add('hidden');
   btnCancelRecord.classList.add('hidden');
   btnStopRecord.disabled = false;
+  updateSubmitState();
 });
 
 btnCancelRecord.addEventListener('click', () => {
@@ -525,6 +689,7 @@ btnCancelRecord.addEventListener('click', () => {
   clearInterval(recordInterval);
   recordedChunks = [];
   recordedAudioBlob = null;
+  clearDraftAudio();
   recordPing.classList.add('hidden');
   recordTimer.textContent = '00:00';
   recordStatusText.textContent = 'Đã hủy ghi âm. Sẵn sàng ghi âm mới.';
@@ -552,26 +717,48 @@ processForm.addEventListener('submit', async (e) => {
 
   const isUploadMode = !dropZoneContainer.classList.contains('hidden');
 
+  // If user is currently recording and clicks submit: auto-stop recording & proceed!
   if (!isUploadMode && mediaRecorder && mediaRecorder.state === 'recording') {
-    showToast('Vui lòng bấm "Dừng & Sử Dụng" để hoàn tất ghi âm trước!', true);
-    return;
+    showToast('Đang dừng ghi âm và chuẩn bị gửi lên AI...');
+    await new Promise((resolve) => {
+      const origOnStop = mediaRecorder.onstop;
+      mediaRecorder.onstop = () => {
+        if (origOnStop) origOnStop();
+        resolve();
+      };
+      if (mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
+      clearInterval(recordInterval);
+      recordPing.classList.add('hidden');
+      recordStatusText.textContent = 'Ghi âm hoàn tất! Đang gửi lên AI tóm tắt...';
+      btnStartRecord.classList.remove('hidden');
+      if (btnStartRecordText) btnStartRecordText.textContent = 'Ghi Âm Lại';
+      btnStopRecord.classList.add('hidden');
+      btnCancelRecord.classList.add('hidden');
+    });
   }
 
   let audioFile = null;
 
   if (isUploadMode) {
     audioFile = audioFileInput.files[0];
-  } else if (recordedAudioBlob) {
+    if (!audioFile) {
+      showToast('Vui lòng chọn hoặc kéo thả file âm thanh vào ô bên trên!', true);
+      dropZone.click();
+      return;
+    }
+  } else {
+    if (!recordedAudioBlob) {
+      showToast('Vui lòng bấm nút "Bắt Đầu Ghi Âm" màu đỏ ở trên trước!', true);
+      btnStartRecord.focus();
+      return;
+    }
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const ext = (recordedAudioBlob.type && recordedAudioBlob.type.includes('mp4')) ? 'm4a' : 'webm';
     audioFile = new File([recordedAudioBlob], `meeting-record-${timestamp}.${ext}`, {
       type: recordedAudioBlob.type || 'audio/webm',
     });
-  }
-
-  if (!audioFile) {
-    showToast('Vui lòng chọn hoặc ghi âm file âm thanh trước!', true);
-    return;
   }
 
   // Check key
@@ -599,6 +786,7 @@ processForm.addEventListener('submit', async (e) => {
   }
 
   // UI state
+  isCurrentlySubmitting = true;
   btnSubmitRecap.disabled = true;
   processForm.classList.add('hidden');
   processingCard.classList.remove('hidden');
@@ -625,15 +813,18 @@ processForm.addEventListener('submit', async (e) => {
     }
 
     showToast('Tạo bản tóm tắt cuộc họp thành công!');
+    await clearDraftAudio();
+    if (draftRecoveryBanner) draftRecoveryBanner.classList.add('hidden');
     await loadMeetings();
     viewMeeting(data.meeting.id);
   } catch (err) {
     console.error('Processing failed:', err);
     showToast(err.message || 'Lỗi khi gửi lên Gemini API', true);
   } finally {
+    isCurrentlySubmitting = false;
     processingCard.classList.add('hidden');
     processForm.classList.remove('hidden');
-    btnSubmitRecap.disabled = false;
+    updateSubmitState();
   }
 });
 
@@ -1188,4 +1379,5 @@ function escapeHtml(str) {
 
 // Initial Boot: Check Auth -> Load Data
 checkAuth();
+checkAndOfferDraftRecovery();
 if (window.lucide) lucide.createIcons();
