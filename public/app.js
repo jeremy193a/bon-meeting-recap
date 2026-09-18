@@ -9,7 +9,6 @@ let recordedChunks = [];
 let recordInterval = null;
 let recordSeconds = 0;
 let recordedAudioBlob = null;
-let serverHasKey = false;
 
 // DOM Elements — Auth & User Profile
 const loginModal = document.getElementById('loginModal');
@@ -26,17 +25,6 @@ const userAvatar = document.getElementById('userAvatar');
 const userNameDisplay = document.getElementById('userNameDisplay');
 const userEnvBadge = document.getElementById('userEnvBadge');
 const btnLogout = document.getElementById('btnLogout');
-
-// DOM Elements — Header & Key
-const btnApiKey = document.getElementById('btnApiKey');
-const apiKeyDot = document.getElementById('apiKeyDot');
-const apiKeyLabel = document.getElementById('apiKeyLabel');
-const apiKeyBanner = document.getElementById('apiKeyBanner');
-const apiKeyModal = document.getElementById('apiKeyModal');
-const btnCloseModal = document.getElementById('btnCloseModal');
-const btnSaveApiKey = document.getElementById('btnSaveApiKey');
-const inputApiKeyModal = document.getElementById('inputApiKeyModal');
-const bannerInputKeyBtn = document.getElementById('bannerInputKeyBtn');
 
 const btnNewRecap = document.getElementById('btnNewRecap');
 const searchInput = document.getElementById('searchInput');
@@ -299,55 +287,21 @@ if (btnLogout) {
 }
 
 // =========================================================================
-// 2. Gemini Config & API Key
+// 2. AI provider status
 // =========================================================================
 
 async function checkConfig() {
   try {
     const res = await fetch('/api/config');
     const data = await res.json();
-    serverHasKey = Boolean(data.hasApiKey);
-    const localKey = localStorage.getItem('gemini_api_key');
-
-    if (serverHasKey || localKey) {
-      apiKeyDot.className = 'w-2 h-2 rounded-full bg-emerald-500';
-      apiKeyLabel.textContent = serverHasKey ? 'API Key (.env)' : 'API Key (Browser)';
-      apiKeyBanner.classList.add('hidden');
-    } else {
-      apiKeyDot.className = 'w-2 h-2 rounded-full bg-amber-400';
-      apiKeyLabel.textContent = 'Thiếu Key';
-      apiKeyBanner.classList.remove('hidden');
+    if (data.aiProvider !== 'agy') {
+      console.warn('Unexpected AI provider:', data.aiProvider);
     }
   } catch (err) {
     console.error('Config check failed:', err);
+    showToast('Không thể kiểm tra kết nối AI.', true);
   }
 }
-
-function getActiveApiKey() {
-  return localStorage.getItem('gemini_api_key') || null;
-}
-
-btnApiKey.addEventListener('click', () => {
-  inputApiKeyModal.value = localStorage.getItem('gemini_api_key') || '';
-  apiKeyModal.classList.remove('hidden');
-});
-bannerInputKeyBtn.addEventListener('click', () => {
-  inputApiKeyModal.value = localStorage.getItem('gemini_api_key') || '';
-  apiKeyModal.classList.remove('hidden');
-});
-btnCloseModal.addEventListener('click', () => apiKeyModal.classList.add('hidden'));
-btnSaveApiKey.addEventListener('click', () => {
-  const val = inputApiKeyModal.value.trim();
-  if (val) {
-    localStorage.setItem('gemini_api_key', val);
-    showToast('Đã lưu Gemini API Key!');
-  } else {
-    localStorage.removeItem('gemini_api_key');
-    showToast('Đã xóa Gemini API Key cục bộ.');
-  }
-  apiKeyModal.classList.add('hidden');
-  checkConfig();
-});
 
 // Advanced toggle
 btnToggleAdvanced.addEventListener('click', () => {
@@ -761,11 +715,8 @@ processForm.addEventListener('submit', async (e) => {
     });
   }
 
-  // Check key
-  const apiKey = getActiveApiKey();
-  if (!serverHasKey && !apiKey) {
-    apiKeyModal.classList.remove('hidden');
-    showToast('Vui lòng nhập Gemini API Key để tiếp tục!', true);
+  if (!audioFile) {
+    showToast('Vui lòng chọn hoặc ghi âm file âm thanh trước!', true);
     return;
   }
 
@@ -792,14 +743,8 @@ processForm.addEventListener('submit', async (e) => {
   processingCard.classList.remove('hidden');
 
   try {
-    const headers = {};
-    if (apiKey) {
-      headers['x-gemini-api-key'] = apiKey;
-    }
-
     const res = await fetch('/api/meetings/process', {
       method: 'POST',
-      headers,
       body: formData,
     });
 
@@ -819,7 +764,7 @@ processForm.addEventListener('submit', async (e) => {
     viewMeeting(data.meeting.id);
   } catch (err) {
     console.error('Processing failed:', err);
-    showToast(err.message || 'Lỗi khi gửi lên Gemini API', true);
+    showToast(err.message || 'Lỗi khi xử lý audio bằng AGY', true);
   } finally {
     isCurrentlySubmitting = false;
     processingCard.classList.add('hidden');

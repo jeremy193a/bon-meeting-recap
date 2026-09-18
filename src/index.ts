@@ -10,7 +10,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { generateMeetingExcel } from './services/excel.js';
 import { generateMeetingWord } from './services/word.js';
-import { processAudioToRecap } from './services/gemini.js';
+import { processAudioToRecap } from './services/agy.js';
 import {
   authenticateOdooUser,
   pushMeetingToOdoo,
@@ -142,14 +142,16 @@ app.post('/api/auth/logout', (c) => {
 // -------------------------------------------------------------
 
 /**
- * Health check & config status
+ * Health check & AI provider status
  */
+app.get('/api/health', (c) => c.json({ status: 'ok' }));
+
 app.get('/api/config', (c) => {
   const session = getSession(c);
   return c.json({
     status: 'ok',
-    hasApiKey: Boolean(config.geminiApiKey),
-    model: config.geminiModel,
+    aiProvider: 'agy',
+    model: config.agyModel,
     authenticated: Boolean(session),
     user: session ? { uid: session.uid, name: session.name, email: session.email } : null,
   });
@@ -357,7 +359,7 @@ app.get('/api/meetings/:id/audio', async (c) => {
 });
 
 /**
- * Upload and process audio file with Gemini -> isolated to authenticated user
+ * Upload and process audio file with AGY -> isolated to authenticated user
  */
 app.post('/api/meetings/process', async (c) => {
   const session = getSession(c);
@@ -369,8 +371,7 @@ app.post('/api/meetings/process', async (c) => {
     const body = await c.req.parseBody();
     const file = body['audio'];
     const customTitle = typeof body['title'] === 'string' ? body['title'].trim() : '';
-    const customPrompt = typeof body['prompt'] === 'string' ? body['prompt'].trim() : '';
-    const clientApiKey = typeof body['apiKey'] === 'string' ? body['apiKey'].trim() : undefined;
+    const customPrompt = typeof body['customPrompt'] === 'string' ? body['customPrompt'].trim() : '';
 
     const attendeesRaw = typeof body['attendees'] === 'string' ? body['attendees'].trim() : '';
     const meetingGoal = typeof body['meetingGoal'] === 'string' ? body['meetingGoal'].trim() : '';
@@ -415,12 +416,11 @@ app.post('/api/meetings/process', async (c) => {
 
     console.log(`[API] Processing audio file for user ${session.name} (${session.uid}): ${file.name} (${mimeType}, size: ${file.size} bytes)`);
 
-    // Call Gemini to transcribe & recap
+    // AGY directly analyzes the saved local audio and creates a recap.
     const recapData = await processAudioToRecap({
       filePath: destinationPath,
       mimeType,
       displayName: file.name,
-      customApiKey: clientApiKey,
       customPrompt: customPrompt || undefined,
       attendees: attendeesRaw || undefined,
       meetingGoal: meetingGoal || undefined,

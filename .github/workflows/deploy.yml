@@ -1,0 +1,42 @@
+name: Deploy Meeting Recap
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: bon-meeting-recap-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # This runner is installed on the Windows/Docker host that owns agy.exe.
+    runs-on: [self-hosted, Windows, bon-meeting-recap]
+    timeout-minutes: 20
+
+    steps:
+      - name: Pull main and rebuild the production container
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = 'C:\Users\Admin\Desktop\Bonario\bon-meeting-recap'
+          Set-Location $repo
+          git fetch --prune origin main
+          git reset --hard origin/main
+          docker compose up -d --build --remove-orphans
+          docker compose ps
+
+      - name: Verify local and public health checks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $deadline = (Get-Date).AddMinutes(2)
+          do {
+            $health = docker inspect --format '{{.State.Health.Status}}' bon-meeting-recap
+            if ($health -eq 'healthy') { break }
+            Start-Sleep -Seconds 3
+          } while ((Get-Date) -lt $deadline)
+          if ($health -ne 'healthy') { throw 'Container health check did not become ready.' }
+          $public = Invoke-RestMethod -Uri 'https://recap.bonstu.site/api/health' -TimeoutSec 30
+          if ($public.status -ne 'ok') { throw 'Public tunnel health check failed.' }

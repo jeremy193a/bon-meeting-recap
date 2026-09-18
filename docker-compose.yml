@@ -1,0 +1,28 @@
+services:
+  bon-meeting-recap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bonario/meeting-recap:latest
+    container_name: bon-meeting-recap
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3300
+      HOST: 0.0.0.0
+    volumes:
+      # Kept on the Windows host so agy.exe can read exactly the same audio files.
+      - ./data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      shared-tunnel:
+        aliases:
+          - bon-meeting-recap
+
+networks:
+  shared-tunnel:
+    name: bonario-shared-tunnel
+    external: true
