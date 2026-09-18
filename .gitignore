@@ -3,5 +3,8 @@ dist/
 data/
 cookies.txt
 ~$*
-.env*
-
+.env
+.env*.local
+.env.production
+.env.development
+!.env.example
