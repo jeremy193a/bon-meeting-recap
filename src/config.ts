@@ -31,7 +31,7 @@ const rootDir = process.cwd();
 export const config: AppConfig = {
   port: Number(process.env.PORT ?? 3300),
   host: process.env.HOST ?? '0.0.0.0',
-  geminiApiKey: process.env.GEMINI_API_KEY ?? null,
+  geminiApiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? process.env.GEMINI_KEY ?? null,
   geminiModel: process.env.GEMINI_MODEL ?? 'gemini-3.6-flash',
   agyCommand: process.env.AGY_COMMAND ?? 'agy',
   agyModel: process.env.AGY_MODEL ?? 'gemini-3.8-flash-low',

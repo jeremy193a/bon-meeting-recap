@@ -353,13 +353,25 @@ async function processAudioWithGemini(options: ProcessAudioOptions): Promise<Mee
 
   const ai = new GoogleGenAI({ apiKey });
   const ext = path.extname(options.filePath).toLowerCase();
-  let uploadMimeType = options.mimeType;
-  if (ext === '.m4a' || ext === '.mp4') {
+  let uploadMimeType = options.mimeType || 'audio/mp4';
+  if (ext === '.m4a' || ext === '.mp4' || uploadMimeType.includes('m4a') || uploadMimeType.includes('latm')) {
     uploadMimeType = 'audio/mp4';
+  } else if (ext === '.mp3' || uploadMimeType === 'audio/mpeg' || uploadMimeType === 'audio/mp3') {
+    uploadMimeType = 'audio/mp3';
+  } else if (ext === '.wav' || uploadMimeType.includes('wav')) {
+    uploadMimeType = 'audio/wav';
+  } else if (ext === '.webm' || uploadMimeType.includes('webm')) {
+    uploadMimeType = 'audio/webm';
+  } else if (ext === '.ogg' || ext === '.oga' || uploadMimeType.includes('ogg')) {
+    uploadMimeType = 'audio/ogg';
+  } else if (ext === '.aac' || uploadMimeType.includes('aac')) {
+    uploadMimeType = 'audio/aac';
+  } else if (ext === '.flac' || uploadMimeType.includes('flac')) {
+    uploadMimeType = 'audio/flac';
   }
 
   console.log(`[Gemini] Uploading ${path.basename(options.filePath)} (${uploadMimeType}) to Gemini File API...`);
-  let file = await ai.files.upload({
+  const file = await ai.files.upload({
     file: options.filePath,
     config: {
       mimeType: uploadMimeType,
@@ -372,55 +384,62 @@ async function processAudioWithGemini(options: ProcessAudioOptions): Promise<Mee
     throw new Error('Gemini File API did not return file name.');
   }
 
-  let attempts = 0;
-  while (file.state === 'PROCESSING' && attempts < 30) {
-    await new Promise((r) => setTimeout(r, 2000));
-    file = await ai.files.get({ name: fileName });
-    attempts++;
-  }
-
-  if (file.state === 'FAILED') {
-    throw new Error('Gemini File API processing failed for this audio file.');
-  }
-
-  const fileUri = file.uri;
-  if (!fileUri) {
-    throw new Error('Gemini File API did not return file URI.');
-  }
-
-  const prompt = buildPrompt(options, true);
-  const models = Array.from(new Set([config.geminiModel, 'gemini-3.6-flash', 'gemini-2.0-flash'].filter(Boolean)));
-  let lastError: unknown;
-
-  for (const model of models) {
-    try {
-      console.log(`[Gemini] Analyzing audio with ${model}...`);
-      const response = await ai.models.generateContent({
-        model,
-        contents: [
-          {
-            fileData: {
-              fileUri,
-              mimeType: file.mimeType ?? uploadMimeType,
-            },
-          },
-          prompt,
-        ],
-        config: {
-          responseMimeType: 'application/json',
-        },
-      });
-
-      if (response.text) {
-        return normalizeRecap(response.text);
-      }
-    } catch (err) {
-      lastError = err;
-      console.warn(`[Gemini] Model ${model} failed:`, err);
+  try {
+    let currentFile = file;
+    let attempts = 0;
+    while (currentFile.state === 'PROCESSING' && attempts < 30) {
+      await new Promise((r) => setTimeout(r, 2000));
+      currentFile = await ai.files.get({ name: fileName });
+      attempts++;
     }
-  }
 
-  throw lastError || new Error('Gemini failed to generate content');
+    if (currentFile.state === 'FAILED') {
+      throw new Error('Gemini File API processing failed for this audio file.');
+    }
+
+    const fileUri = currentFile.uri;
+    if (!fileUri) {
+      throw new Error('Gemini File API did not return file URI.');
+    }
+
+    const prompt = buildPrompt(options, true);
+    const models = Array.from(new Set([config.geminiModel, 'gemini-3.6-flash', 'gemini-2.0-flash'].filter(Boolean)));
+    let lastError: unknown;
+
+    for (const model of models) {
+      try {
+        console.log(`[Gemini] Analyzing audio with ${model}...`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              fileData: {
+                fileUri,
+                mimeType: currentFile.mimeType ?? uploadMimeType,
+              },
+            },
+            prompt,
+          ],
+          config: {
+            responseMimeType: 'application/json',
+          },
+        });
+
+        if (response.text) {
+          return normalizeRecap(response.text);
+        }
+      } catch (err) {
+        lastError = err;
+        console.warn(`[Gemini] Model ${model} failed:`, err);
+      }
+    }
+
+    throw lastError || new Error('Gemini failed to generate content');
+  } finally {
+    ai.files.delete({ name: fileName }).catch((err) => {
+      console.warn(`[Gemini] Cleanup of temporary file ${fileName} skipped:`, err instanceof Error ? err.message : err);
+    });
+  }
 }
 
 /** Processes audio using native Gemini multimodal File API or authenticated AGY CLI. */

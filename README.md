@@ -1,19 +1,24 @@
 # Bon Meeting Recap
 
-Ứng dụng tạo biên bản họp, Action Items và transcript từ file audio. AI chạy qua **AGY** (`gemini-3.8-flash-low` mặc định), dùng phiên đăng nhập AGY có sẵn trên máy chủ — **không cần Gemini API key**.
+Ứng dụng tạo biên bản họp, Action Items, trích đoạn đối thoại và transcript từ file audio. 
+Hệ thống sử dụng **Gemini Multimodal File API** (`@google/genai` với `gemini-3.6-flash`) cho hiệu năng xử lý audio cao nhất (hỗ trợ file tới 2 GB, hoàn tất ~45s cho cuộc họp 90 phút, tự động dọn dẹp file tạm). 
+Đồng thời hỗ trợ fallback về **AGY CLI** khi không cấu hình API key.
 
-## Chạy trực tiếp trên Windows
+## Cấu hình khuyến nghị (Gemini Multimodal Audio)
 
-Điều kiện: `agy` đã đăng nhập và `agy models` hiển thị Gemini 3.8 Flash.
-
-```bash
-copy .env.example .env
-pnpm install
-pnpm build
-pnpm start
-```
-
-Mở `http://localhost:3300`. Ở chế độ này app gọi trực tiếp `agy.exe`.
+1. Sao chép file cấu hình: `copy .env.example .env` (hoặc `cp .env.example .env`)
+2. Điền `GEMINI_API_KEY` vào `.env`:
+   ```env
+   GEMINI_API_KEY=AIzaSy...
+   GEMINI_MODEL=gemini-3.6-flash
+   ```
+3. Chạy trực tiếp:
+   ```bash
+   pnpm install
+   pnpm build
+   pnpm start
+   ```
+   Mở `http://localhost:3300` hoặc truy cập qua Cloudflare Tunnel (`recap.bonstu.site`).
 
 ## Docker (khuyến nghị để deploy)
 
