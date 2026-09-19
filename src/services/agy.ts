@@ -28,56 +28,38 @@ interface AgyExecution {
 
 const meetingRecapJsonSchema = {
   type: 'object',
-  additionalProperties: false,
-  required: [
-    'title',
-    'language',
-    'durationEstimate',
-    'attendees',
-    'meetingGoal',
-    'goalAchievementStatus',
-    'executiveSummary',
-    'decisions',
-    'actionItems',
-    'openQuestions',
-    'risks',
-    'topics',
-    'transcript',
-  ],
   properties: {
     title: { type: 'string' },
     language: { type: 'string' },
     durationEstimate: { type: 'string' },
     attendees: { type: 'array', items: { type: 'string' } },
-    meetingGoal: { type: ['string', 'null'] },
-    goalAchievementStatus: { type: ['string', 'null'] },
+    meetingGoal: { type: 'string', nullable: true },
+    goalAchievementStatus: { type: 'string', nullable: true },
     executiveSummary: { type: 'string' },
     decisions: { type: 'array', items: { type: 'string' } },
     actionItems: {
       type: 'array',
       items: {
         type: 'object',
-        additionalProperties: false,
-        required: ['task', 'assignee', 'dueDate', 'priority', 'description'],
         properties: {
           task: { type: 'string' },
-          assignee: { type: ['string', 'null'] },
-          dueDate: { type: ['string', 'null'] },
+          assignee: { type: 'string', nullable: true },
+          dueDate: { type: 'string', nullable: true },
           priority: { type: 'string', enum: ['low', 'medium', 'high'] },
           description: { type: 'string' },
         },
+        required: ['task', 'priority', 'description'],
       },
     },
     openQuestions: {
       type: 'array',
       items: {
         type: 'object',
-        additionalProperties: false,
-        required: ['question', 'owner'],
         properties: {
           question: { type: 'string' },
-          owner: { type: ['string', 'null'] },
+          owner: { type: 'string', nullable: true },
         },
+        required: ['question'],
       },
     },
     risks: { type: 'array', items: { type: 'string' } },
@@ -85,29 +67,28 @@ const meetingRecapJsonSchema = {
       type: 'array',
       items: {
         type: 'object',
-        additionalProperties: false,
-        required: ['title', 'summary', 'keyPoints'],
         properties: {
           title: { type: 'string' },
           summary: { type: 'string' },
           keyPoints: { type: 'array', items: { type: 'string' } },
         },
+        required: ['title', 'summary', 'keyPoints'],
       },
     },
     transcript: {
       type: 'array',
       items: {
         type: 'object',
-        additionalProperties: false,
-        required: ['timestamp', 'speaker', 'text'],
         properties: {
           timestamp: { type: 'string' },
           speaker: { type: 'string' },
           text: { type: 'string' },
         },
+        required: ['timestamp', 'speaker', 'text'],
       },
     },
   },
+  required: ['title', 'executiveSummary', 'actionItems'],
 } as const;
 
 function getAgyAudioPath(filePath: string): string {
@@ -280,10 +261,82 @@ async function runAgy(prompt: string, model: string): Promise<AgyExecution> {
   return config.agyBridgeUrl ? runAgyBridge(prompt, model) : runAgyDirect(prompt, model);
 }
 
+function cleanJsonString(str: string): string {
+  let cleaned = str.trim();
+  // Strip markdown code fences if present
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  // If there is extraneous text before or after the JSON payload, extract from the outermost braces
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+  return cleaned;
+}
+
+function parseJsonSafely<T = unknown>(input: string): T {
+  const cleaned = cleanJsonString(input);
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (e1) {
+    // Attempt 1: Fix trailing commas before } or ]
+    let repaired = cleaned.replace(/,\s*([}\]])/g, '$1');
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {
+      // Attempt 2: Auto-balance unclosed braces / brackets if truncated
+      let openBraces = 0;
+      let openBrackets = 0;
+      let inString = false;
+      let escaped = false;
+
+      for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = !inString;
+          continue;
+        }
+        if (!inString) {
+          if (char === '{') openBraces++;
+          else if (char === '}') openBraces = Math.max(0, openBraces - 1);
+          else if (char === '[') openBrackets++;
+          else if (char === ']') openBrackets = Math.max(0, openBrackets - 1);
+        }
+      }
+
+      if (inString) repaired += '"';
+      while (openBrackets > 0) {
+        repaired += ']';
+        openBrackets--;
+      }
+      while (openBraces > 0) {
+        repaired += '}';
+        openBraces--;
+      }
+      repaired = repaired.replace(/,\s*([}\]])/g, '$1');
+
+      try {
+        return JSON.parse(repaired) as T;
+      } catch (err) {
+        throw new Error(`Dữ liệu JSON không hợp lệ: ${err instanceof Error ? err.message : String(err)} | Đoạn dữ liệu: ${cleaned.slice(0, 200)}`);
+      }
+    }
+  }
+}
+
 function getAgyResponse(output: string): string {
   let envelope: AgyEnvelope;
   try {
-    envelope = JSON.parse(output) as AgyEnvelope;
+    envelope = parseJsonSafely<AgyEnvelope>(output);
   } catch {
     throw new Error(`AGY returned invalid output: ${output.slice(0, 300)}`);
   }
@@ -296,31 +349,11 @@ function getAgyResponse(output: string): string {
   if (!envelope.response) {
     throw new Error(`AGY returned no structured response: ${output.slice(0, 500)}`);
   }
-  return envelope.response
-    .trim()
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
+  return envelope.response;
 }
 
 function normalizeRecap(responseText: string): MeetingRecapData {
-  let recap: MeetingRecapData;
-  try {
-    recap = JSON.parse(responseText) as MeetingRecapData;
-  } catch {
-    // Some AGY model variants add a short sentence outside an otherwise valid JSON object.
-    const start = responseText.indexOf('{');
-    const end = responseText.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw new Error(`AGY did not return valid recap JSON: ${responseText.slice(0, 300)}`);
-    }
-    try {
-      recap = JSON.parse(responseText.slice(start, end + 1)) as MeetingRecapData;
-    } catch {
-      throw new Error(`AGY did not return valid recap JSON: ${responseText.slice(0, 300)}`);
-    }
-  }
+  const recap = parseJsonSafely<MeetingRecapData>(responseText);
 
   if (!recap.title || !recap.executiveSummary || !Array.isArray(recap.actionItems)) {
     throw new Error('AGY response is missing required meeting recap fields.');
@@ -403,34 +436,48 @@ async function processAudioWithGemini(options: ProcessAudioOptions): Promise<Mee
     }
 
     const prompt = buildPrompt(options, true);
-    const models = Array.from(new Set([config.geminiModel, 'gemini-3.6-flash', 'gemini-2.0-flash'].filter(Boolean)));
+    // Reliable models with high multimodal capacity
+    const models = Array.from(new Set([
+      config.geminiModel,
+      'gemini-2.5-flash',
+      'gemini-3.6-flash',
+      'gemini-3.7-flash',
+    ].filter(Boolean)));
     let lastError: unknown;
 
     for (const model of models) {
-      try {
-        console.log(`[Gemini] Analyzing audio with ${model}...`);
-        const response = await ai.models.generateContent({
-          model,
-          contents: [
-            {
-              fileData: {
-                fileUri,
-                mimeType: currentFile.mimeType ?? uploadMimeType,
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          console.log(`[Gemini] Analyzing audio with ${model} (attempt ${attempt}/2)...`);
+          const response = await ai.models.generateContent({
+            model,
+            contents: [
+              {
+                fileData: {
+                  fileUri,
+                  mimeType: currentFile.mimeType ?? uploadMimeType,
+                },
               },
+              prompt,
+            ],
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: meetingRecapJsonSchema,
+              maxOutputTokens: 16384,
             },
-            prompt,
-          ],
-          config: {
-            responseMimeType: 'application/json',
-          },
-        });
+          });
 
-        if (response.text) {
-          return normalizeRecap(response.text);
+          if (response.text) {
+            return normalizeRecap(response.text);
+          }
+        } catch (err) {
+          lastError = err;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.warn(`[Gemini] Model ${model} attempt ${attempt} failed: ${errMsg.slice(0, 200)}`);
+          if (attempt < 2 && (errMsg.includes('503') || errMsg.includes('demand') || errMsg.includes('rate'))) {
+            await new Promise((r) => setTimeout(r, 2000));
+          }
         }
-      } catch (err) {
-        lastError = err;
-        console.warn(`[Gemini] Model ${model} failed:`, err);
       }
     }
 

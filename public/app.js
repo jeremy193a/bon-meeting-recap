@@ -176,6 +176,56 @@ function showToast(msg, isError = false) {
   }, 3500);
 }
 
+// Helper: Safely parse JSON response and handle HTTP/proxy error pages (Cloudflare, Nginx, 502, 504, etc.)
+async function parseJsonResponse(res, defaultErrMsg = 'Yêu cầu thất bại') {
+  let data = null;
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      data = await res.json();
+    } catch (e) {
+      console.warn('Failed to parse JSON response despite application/json header:', e);
+    }
+  }
+
+  if (!res.ok) {
+    if (data && (data.error || data.message)) {
+      const err = new Error(data.error || data.message);
+      err.data = data;
+      err.status = res.status;
+      err.needLogin = !!data.needLogin;
+      throw err;
+    }
+    if (res.status === 504 || res.status === 524) {
+      throw new Error('Quá thời gian xử lý (Gateway Timeout). File audio có thể quá dài hoặc kết nối mạng bị gián đoạn.');
+    }
+    if (res.status === 413) {
+      throw new Error('File audio quá lớn, vượt quá giới hạn tải lên của hệ thống.');
+    }
+    if (res.status === 502) {
+      throw new Error('Máy chủ AI hoặc kết nối proxy tạm thời gián đoạn (502 Bad Gateway). Vui lòng thử lại sau.');
+    }
+    if (res.status === 401) {
+      const err = new Error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+      err.needLogin = true;
+      throw err;
+    }
+    const rawText = await res.text().catch(() => '');
+    throw new Error(rawText.slice(0, 150) || `${defaultErrMsg} (Mã lỗi ${res.status})`);
+  }
+
+  if (data === null) {
+    const rawText = await res.text().catch(() => '');
+    try {
+      return JSON.parse(rawText);
+    } catch {
+      throw new Error('Phản hồi từ máy chủ không đúng định dạng JSON.');
+    }
+  }
+
+  return data;
+}
+
 // =========================================================================
 // 1. Odoo Authentication & SSO Management
 // =========================================================================
@@ -183,7 +233,7 @@ function showToast(msg, isError = false) {
 async function checkAuth() {
   try {
     const res = await fetch('/api/auth/me');
-    const data = await res.json();
+    const data = await parseJsonResponse(res, 'Xác thực thất bại');
     if (data.authenticated && data.user) {
       currentUser = data.user;
       renderUserBar();
@@ -239,9 +289,9 @@ if (loginForm) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: email, password, profile }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res, 'Email hoặc mật khẩu Odoo không chính xác.');
 
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || 'Email hoặc mật khẩu Odoo không chính xác.');
       }
 
@@ -294,7 +344,7 @@ if (btnLogout) {
 async function checkConfig() {
   try {
     const res = await fetch('/api/config');
-    const data = await res.json();
+    const data = await parseJsonResponse(res, 'Không thể tải cấu hình AI');
     if (data.aiProvider !== 'agy') {
       console.warn('Unexpected AI provider:', data.aiProvider);
     }
@@ -752,8 +802,8 @@ processForm.addEventListener('submit', async (e) => {
       body: formData,
     });
 
-    const data = await res.json();
-    if (!res.ok || data.error) {
+    const data = await parseJsonResponse(res, 'Tạo bản tóm tắt cuộc họp thất bại');
+    if (data.error) {
       if (data.needLogin) {
         currentUser = null;
         loginModal.classList.remove('hidden');
@@ -768,7 +818,11 @@ processForm.addEventListener('submit', async (e) => {
     viewMeeting(data.meeting.id);
   } catch (err) {
     console.error('Processing failed:', err);
-    showToast(err.message || 'Lỗi khi xử lý audio bằng AGY', true);
+    if (err.needLogin) {
+      currentUser = null;
+      loginModal.classList.remove('hidden');
+    }
+    showToast(err.message || 'Lỗi khi xử lý audio bằng AI', true);
   } finally {
     isCurrentlySubmitting = false;
     processingCard.classList.add('hidden');
@@ -785,8 +839,8 @@ async function loadMeetings() {
   if (!currentUser) return;
   try {
     const res = await fetch('/api/meetings');
-    const data = await res.json();
-    if (res.status === 401 && data.needLogin) {
+    const data = await parseJsonResponse(res, 'Không thể tải danh sách cuộc họp');
+    if (data.needLogin) {
       currentUser = null;
       loginModal.classList.remove('hidden');
       return;
@@ -878,8 +932,8 @@ async function viewMeeting(id) {
 
   try {
     const res = await fetch(`/api/meetings/${id}`);
-    const data = await res.json();
-    if (!res.ok || !data.meeting) throw new Error(data.error || 'Không tìm thấy cuộc họp');
+    const data = await parseJsonResponse(res, 'Không tìm thấy cuộc họp');
+    if (!data.meeting) throw new Error(data.error || 'Không tìm thấy cuộc họp');
 
     const m = data.meeting;
     currentMeetingData = m;
@@ -1104,8 +1158,8 @@ function renderActionItems(meeting) {
         const res = await fetch(`/api/meetings/${meeting.id}/action-items/${index}/toggle`, {
           method: 'POST',
         });
-        const d = await res.json();
-        if (res.ok && d.meeting) {
+        const d = await parseJsonResponse(res, 'Không thể cập nhật trạng thái');
+        if (d.meeting) {
           currentMeetingData = d.meeting;
           renderActionItems(d.meeting);
           showToast('Đã cập nhật trạng thái nhiệm vụ!');
@@ -1228,8 +1282,8 @@ if (btnConfirmPushOdoo) {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+      const data = await parseJsonResponse(res, 'Khởi tạo dự án Odoo thất bại');
+      if (!data.success) {
         throw new Error(data.error || 'Khởi tạo dự án Odoo thất bại.');
       }
 
