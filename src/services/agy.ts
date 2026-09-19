@@ -292,6 +292,7 @@ function getAgyResponse(output: string): string {
     throw new Error(`AGY returned no structured response: ${output.slice(0, 500)}`);
   }
   return envelope.response
+    .trim()
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
