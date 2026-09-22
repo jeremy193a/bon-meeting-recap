@@ -101,6 +101,9 @@ const btnSubmitRecap = document.getElementById('btnSubmitRecap');
 const btnSubmitRecapText = document.getElementById('btnSubmitRecapText');
 const btnSubmitRecapIcon = document.getElementById('btnSubmitRecapIcon');
 const processingCard = document.getElementById('processingCard');
+const processingTitleText = document.getElementById('processingTitleText');
+const processingStepText = document.getElementById('processingStepText');
+const processingProgressBar = document.getElementById('processingProgressBar');
 
 const draftRecoveryBanner = document.getElementById('draftRecoveryBanner');
 const draftRecoveryTime = document.getElementById('draftRecoveryTime');
@@ -771,24 +774,22 @@ processForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  const metadata = {
+    title: meetingTitleInput.value.trim(),
+    attendees: attendeesInput && attendeesInput.value.trim() ? attendeesInput.value.trim() : '',
+    meetingGoal: meetingGoalInput && meetingGoalInput.value.trim() ? meetingGoalInput.value.trim() : '',
+    languagePreference: languagePreferenceInput && languagePreferenceInput.value ? languagePreferenceInput.value : 'auto',
+    customPrompt: customPromptInput.value.trim(),
+  };
+
   const formData = new FormData();
   formData.append('audio', audioFile);
   formData.append('file', audioFile); // dual-field for maximum compatibility
-  if (meetingTitleInput.value.trim()) {
-    formData.append('title', meetingTitleInput.value.trim());
-  }
-  if (attendeesInput && attendeesInput.value.trim()) {
-    formData.append('attendees', attendeesInput.value.trim());
-  }
-  if (meetingGoalInput && meetingGoalInput.value.trim()) {
-    formData.append('meetingGoal', meetingGoalInput.value.trim());
-  }
-  if (languagePreferenceInput && languagePreferenceInput.value) {
-    formData.append('languagePreference', languagePreferenceInput.value);
-  }
-  if (customPromptInput.value.trim()) {
-    formData.append('customPrompt', customPromptInput.value.trim());
-  }
+  if (metadata.title) formData.append('title', metadata.title);
+  if (metadata.attendees) formData.append('attendees', metadata.attendees);
+  if (metadata.meetingGoal) formData.append('meetingGoal', metadata.meetingGoal);
+  if (metadata.languagePreference) formData.append('languagePreference', metadata.languagePreference);
+  if (metadata.customPrompt) formData.append('customPrompt', metadata.customPrompt);
 
   // UI state
   isCurrentlySubmitting = true;
@@ -797,18 +798,34 @@ processForm.addEventListener('submit', async (e) => {
   processingCard.classList.remove('hidden');
 
   try {
-    const res = await fetch('/api/meetings/process', {
-      method: 'POST',
-      body: formData,
-    });
+    let data;
+    if (audioFile.size > CHUNK_THRESHOLD) {
+      console.log(`[Upload] File size ${(audioFile.size / 1024 / 1024).toFixed(1)} MB exceeds ${CHUNK_THRESHOLD / 1024 / 1024} MB threshold. Using Chunked Upload...`);
+      data = await uploadAudioChunked(audioFile, metadata);
+    } else {
+      if (processingTitleText) processingTitleText.textContent = 'Hệ Thống Đang Xử Lý Audio...';
+      if (processingStepText) processingStepText.textContent = 'Đang tải lên và phân tích nội dung cuộc họp...';
+      if (processingProgressBar) processingProgressBar.style.width = '60%';
 
-    const data = await parseJsonResponse(res, 'Tạo bản tóm tắt cuộc họp thất bại');
-    if (data.error) {
-      if (data.needLogin) {
+      const res = await fetch('/api/meetings/process', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.status === 413) {
+        console.warn('[Upload] Received 413 Request Entity Too Large. Falling back to Chunked Upload...');
+        data = await uploadAudioChunked(audioFile, metadata);
+      } else {
+        data = await parseJsonResponse(res, 'Tạo bản tóm tắt cuộc họp thất bại');
+      }
+    }
+
+    if (!data || data.error) {
+      if (data && data.needLogin) {
         currentUser = null;
         loginModal.classList.remove('hidden');
       }
-      throw new Error(data.error || 'Xử lý thất bại');
+      throw new Error((data && data.error) || 'Xử lý thất bại');
     }
 
     showToast('Tạo bản tóm tắt cuộc họp thành công!');
@@ -830,6 +847,97 @@ processForm.addEventListener('submit', async (e) => {
     updateSubmitState();
   }
 });
+
+// Chunked Upload Helper to bypass Cloudflare 100MB body limit
+const CHUNK_SIZE = 20 * 1024 * 1024; // 20 MB per chunk
+const CHUNK_THRESHOLD = 50 * 1024 * 1024; // 50 MB threshold for chunking
+
+async function uploadAudioChunked(audioFile, metadata) {
+  const totalChunks = Math.ceil(audioFile.size / CHUNK_SIZE);
+  const uploadId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : 'up-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9);
+
+  if (processingTitleText) processingTitleText.textContent = 'Đang Tải Audio Lên Máy Chủ...';
+
+  let lastResult = null;
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, audioFile.size);
+    const chunkBlob = audioFile.slice(start, end);
+    const percent = Math.round((i / totalChunks) * 100);
+
+    if (processingStepText) {
+      processingStepText.textContent = `Đang tải lên: ${percent}% (Phần ${i + 1}/${totalChunks} - ${(audioFile.size / 1024 / 1024).toFixed(1)} MB)...`;
+    }
+    if (processingProgressBar) {
+      processingProgressBar.style.width = `${Math.max(10, percent)}%`;
+    }
+
+    const chunkFormData = new FormData();
+    chunkFormData.append('uploadId', uploadId);
+    chunkFormData.append('chunkIndex', String(i));
+    chunkFormData.append('totalChunks', String(totalChunks));
+    chunkFormData.append('fileName', audioFile.name);
+    chunkFormData.append('chunk', chunkBlob, audioFile.name);
+
+    if (i === totalChunks - 1) {
+      // Final chunk carries meeting metadata
+      if (metadata.title) chunkFormData.append('title', metadata.title);
+      if (metadata.attendees) chunkFormData.append('attendees', metadata.attendees);
+      if (metadata.meetingGoal) chunkFormData.append('meetingGoal', metadata.meetingGoal);
+      if (metadata.languagePreference) chunkFormData.append('languagePreference', metadata.languagePreference);
+      if (metadata.customPrompt) chunkFormData.append('customPrompt', metadata.customPrompt);
+
+      if (processingTitleText) processingTitleText.textContent = 'Đang Nén Và Phân Tích Audio...';
+      if (processingStepText) processingStepText.textContent = 'Server đang nén audio bằng ffmpeg và phân tích nội dung cuộc họp...';
+      if (processingProgressBar) processingProgressBar.style.width = '95%';
+    }
+
+    let attempts = 0;
+    let success = false;
+    let chunkRes = null;
+
+    while (!success && attempts < 3) {
+      attempts++;
+      try {
+        chunkRes = await fetch('/api/meetings/upload-chunk', {
+          method: 'POST',
+          body: chunkFormData,
+        });
+        if (chunkRes.ok) {
+          success = true;
+        } else if (attempts < 3) {
+          console.warn(`[UploadChunk] Chunk ${i + 1} attempt ${attempts} failed with HTTP ${chunkRes.status}. Retrying...`);
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      } catch (netErr) {
+        if (attempts >= 3) throw netErr;
+        console.warn(`[UploadChunk] Network error on chunk ${i + 1}, retrying...`, netErr);
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+
+    if (!chunkRes) {
+      throw new Error(`Không thể tải lên phân đoạn ${i + 1}/${totalChunks}`);
+    }
+
+    const data = await parseJsonResponse(chunkRes, 'Tải lên phân đoạn thất bại');
+    if (data.error) {
+      if (data.needLogin) {
+        currentUser = null;
+        loginModal.classList.remove('hidden');
+      }
+      throw new Error(data.error);
+    }
+
+    if (i === totalChunks - 1) {
+      lastResult = data;
+    }
+  }
+
+  return lastResult;
+}
 
 // =========================================================================
 // 5. Load & Render Meetings List

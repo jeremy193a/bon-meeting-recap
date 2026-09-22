@@ -11,6 +11,7 @@ import { config } from './config.js';
 import { generateMeetingExcel } from './services/excel.js';
 import { generateMeetingWord } from './services/word.js';
 import { processAudioToRecap } from './services/agy.js';
+import { compressAudio } from './services/audio.js';
 import {
   authenticateOdooUser,
   pushMeetingToOdoo,
@@ -408,28 +409,18 @@ app.post('/api/meetings/process', async (c) => {
     const arrayBuffer = await file.arrayBuffer();
     await fs.writeFile(destinationPath, Buffer.from(arrayBuffer));
 
-    // Determine MIME type
-    let mimeType = file.type;
-    if (!mimeType || mimeType === 'application/octet-stream') {
-      const mimeMap: Record<string, string> = {
-        '.mp3': 'audio/mp3',
-        '.wav': 'audio/wav',
-        '.m4a': 'audio/m4a',
-        '.webm': 'audio/webm',
-        '.weba': 'audio/webm',
-        '.ogg': 'audio/ogg',
-        '.flac': 'audio/flac',
-        '.aac': 'audio/aac',
-      };
-      mimeType = mimeMap[ext] ?? 'audio/webm';
-    }
+    // Compress audio locally with ffmpeg before sending to AI
+    const compressionResult = await compressAudio(destinationPath);
+    const finalAudioPath = compressionResult.audioPath;
+    const finalAudioFileName = path.basename(finalAudioPath);
+    const finalMimeType = compressionResult.mimeType;
 
-    console.log(`[API] Processing audio file for user ${session.name} (${session.uid}): ${file.name} (${mimeType}, size: ${file.size} bytes, language: ${languagePreference})`);
+    console.log(`[API] Processing audio file for user ${session.name} (${session.uid}): ${finalAudioFileName} (${finalMimeType}, language: ${languagePreference})`);
 
-    // AGY directly analyzes the saved local audio and creates a recap.
+    // AI analyzes the audio (Gemini or AGY)
     const recapData = await processAudioToRecap({
-      filePath: destinationPath,
-      mimeType,
+      filePath: finalAudioPath,
+      mimeType: finalMimeType,
       displayName: file.name,
       customPrompt: customPrompt || undefined,
       attendees: attendeesRaw || undefined,
@@ -443,8 +434,8 @@ app.post('/api/meetings/process', async (c) => {
       createdAt: new Date().toISOString(),
       ownerId: session.uid,
       ownerEmail: session.email,
-      audioFileName,
-      audioMimeType: mimeType,
+      audioFileName: finalAudioFileName,
+      audioMimeType: finalMimeType,
       recap: recapData,
     };
 
@@ -457,6 +448,140 @@ app.post('/api/meetings/process', async (c) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown processing error';
     console.error('[API] Processing error:', err);
+    return c.json({ error: message }, 500);
+  }
+});
+
+/**
+ * Upload audio in chunks (bypassing Cloudflare 100MB body size limit).
+ * When the final chunk arrives, chunks are assembled, compressed with ffmpeg, and processed.
+ */
+app.post('/api/meetings/upload-chunk', async (c) => {
+  const session = getSession(c);
+  if (!session) {
+    return c.json({ error: 'Vui lòng đăng nhập Odoo để thực hiện ghi âm/xử lý cuộc họp.', needLogin: true }, 401);
+  }
+
+  try {
+    const body = await c.req.parseBody();
+    const uploadId = typeof body['uploadId'] === 'string' ? body['uploadId'].trim() : '';
+    const chunkIndex = Number(body['chunkIndex']);
+    const totalChunks = Number(body['totalChunks']);
+    const fileName = typeof body['fileName'] === 'string' ? body['fileName'].trim() : 'meeting.mp3';
+    const chunk = body['chunk'];
+
+    if (!uploadId || isNaN(chunkIndex) || isNaN(totalChunks) || totalChunks <= 0 || chunkIndex < 0 || chunkIndex >= totalChunks) {
+      return c.json({ error: 'Invalid chunk parameters' }, 400);
+    }
+
+    if (!chunk || !(chunk instanceof File)) {
+      return c.json({ error: 'Missing or invalid audio chunk' }, 400);
+    }
+
+    const dirs = getUserDirs(session.uid);
+    await initStorage(session.uid);
+    const chunkDir = path.join(dirs.chunksDir, uploadId);
+    await fs.mkdir(chunkDir, { recursive: true });
+
+    const chunkPath = path.join(chunkDir, `part_${chunkIndex}`);
+    const chunkBuffer = await chunk.arrayBuffer();
+    await fs.writeFile(chunkPath, Buffer.from(chunkBuffer));
+
+    // If more chunks are expected, respond with progress acknowledgment
+    if (chunkIndex < totalChunks - 1) {
+      return c.json({
+        success: true,
+        uploadedChunk: chunkIndex,
+        totalChunks,
+        status: 'uploading',
+      });
+    }
+
+    // All chunks received - verify every chunk exists
+    for (let i = 0; i < totalChunks; i++) {
+      const partPath = path.join(chunkDir, `part_${i}`);
+      const partStat = await fs.stat(partPath).catch(() => null);
+      if (!partStat || partStat.size === 0) {
+        return c.json({ error: `Thiếu phân đoạn ${i + 1}/${totalChunks}. Vui lòng thử lại.` }, 400);
+      }
+    }
+
+    // Assemble all chunks into destination audio file
+    const ext = path.extname(fileName) || '.mp3';
+    const meetingId = crypto.randomUUID();
+    const safeBaseName = path.basename(fileName, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const assembledFileName = `${meetingId}-${safeBaseName}${ext}`;
+    const destinationPath = path.join(dirs.uploadsDir, assembledFileName);
+
+    console.log(`[UploadChunk] Assembling ${totalChunks} chunks into ${assembledFileName}...`);
+    const writeHandle = await fs.open(destinationPath, 'w');
+    try {
+      for (let i = 0; i < totalChunks; i++) {
+        const partPath = path.join(chunkDir, `part_${i}`);
+        const buf = await fs.readFile(partPath);
+        await writeHandle.write(buf);
+      }
+    } finally {
+      await writeHandle.close();
+    }
+
+    // Clean up temporary chunk parts
+    await fs.rm(chunkDir, { recursive: true, force: true }).catch(() => {});
+
+    // Compress assembled audio with ffmpeg
+    const compressionResult = await compressAudio(destinationPath);
+    const finalAudioPath = compressionResult.audioPath;
+    const finalAudioFileName = path.basename(finalAudioPath);
+    const finalMimeType = compressionResult.mimeType;
+
+    // Metadata
+    const customTitle = typeof body['title'] === 'string' ? body['title'].trim() : '';
+    const customPrompt = typeof body['customPrompt'] === 'string' ? body['customPrompt'].trim() : '';
+    const attendeesRaw = typeof body['attendees'] === 'string' ? body['attendees'].trim() : '';
+    const meetingGoal = typeof body['meetingGoal'] === 'string' ? body['meetingGoal'].trim() : '';
+    const rawLang = typeof body['languagePreference'] === 'string'
+      ? body['languagePreference'].trim()
+      : typeof body['language'] === 'string'
+      ? body['language'].trim()
+      : 'auto';
+    const languagePreference = (['auto', 'en', 'vi', 'bilingual'].includes(rawLang) ? rawLang : 'auto') as
+      | 'auto'
+      | 'en'
+      | 'vi'
+      | 'bilingual';
+
+    console.log(`[UploadChunk] Processing assembled audio for user ${session.name} (${session.uid}): ${finalAudioFileName} (${finalMimeType})`);
+
+    const recapData = await processAudioToRecap({
+      filePath: finalAudioPath,
+      mimeType: finalMimeType,
+      displayName: fileName,
+      customPrompt: customPrompt || undefined,
+      attendees: attendeesRaw || undefined,
+      meetingGoal: meetingGoal || undefined,
+      languagePreference,
+    });
+
+    const record: MeetingRecord = {
+      id: meetingId,
+      title: customTitle || recapData.title || fileName,
+      createdAt: new Date().toISOString(),
+      ownerId: session.uid,
+      ownerEmail: session.email,
+      audioFileName: finalAudioFileName,
+      audioMimeType: finalMimeType,
+      recap: recapData,
+    };
+
+    await saveMeeting(record, session.uid);
+
+    return c.json({
+      success: true,
+      meeting: record,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown chunk upload error';
+    console.error('[UploadChunk] Error:', err);
     return c.json({ error: message }, 500);
   }
 });

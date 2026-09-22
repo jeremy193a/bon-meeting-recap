@@ -13,11 +13,13 @@ export function getUserDirs(userId?: number) {
     return {
       meetingsDir: path.join(userBase, 'meetings'),
       uploadsDir: path.join(userBase, 'uploads'),
+      chunksDir: path.join(userBase, 'chunks'),
     };
   }
   return {
     meetingsDir: config.dataDir,
     uploadsDir: config.uploadsDir,
+    chunksDir: path.join(config.dataDir, '..', 'chunks'),
   };
 }
 
@@ -29,6 +31,7 @@ export async function initStorage(userId?: number): Promise<void> {
     const dirs = getUserDirs(userId);
     await fs.mkdir(dirs.meetingsDir, { recursive: true });
     await fs.mkdir(dirs.uploadsDir, { recursive: true });
+    await fs.mkdir(dirs.chunksDir, { recursive: true });
   } catch (error) {
     console.error('Failed to initialize storage directories:', error);
     throw error;
